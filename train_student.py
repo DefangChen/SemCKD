@@ -24,7 +24,7 @@ from dataset.cifar100 import get_cifar100_dataloaders, get_cifar100_dataloaders_
 
 from helper.util import adjust_learning_rate
 
-from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss
+from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss, IRGLoss
 from distiller_zoo import PKT, ABLoss, FactorTransfer, KDSVD, FSP, NSTLoss
 from crd.criterion import CRDLoss
 
@@ -67,7 +67,7 @@ def parse_option():
     # distillation
     parser.add_argument('--distill', type=str, default='kd', choices=['kd', 'hint', 'attention', 'similarity',
                                                                       'correlation', 'vid', 'crd', 'kdsvd', 'fsp',
-                                                                      'rkd', 'pkt', 'abound', 'factor', 'nst'])
+                                                                      'rkd', 'pkt', 'abound', 'factor', 'nst', 'irg'])
     parser.add_argument('--trial', type=str, default='1', help='trial id')
 
     parser.add_argument('-r', '--gamma', type=float, default=1, help='weight for classification')
@@ -86,6 +86,13 @@ def parse_option():
 
     # hint layer
     parser.add_argument('--hint_layer', default=2, type=int, choices=[0, 1, 2, 3, 4])
+
+    # transform layers for IRG
+    parser.add_argument('--transform_layer_t', nargs='+', type=int, default = [])
+    parser.add_argument('--transform_layer_s', nargs='+', type=int, default = [])
+
+    # switch for edge transformation
+    parser.add_argument('--no_edge_transform', action='store_true')
 
     opt = parser.parse_args()
 
@@ -204,6 +211,8 @@ def main():
         criterion_kd = Similarity()
     elif opt.distill == 'rkd':
         criterion_kd = RKDLoss()
+    elif opt.distill == 'irg':
+        criterion_kd = IRGLoss()
     elif opt.distill == 'pkt':
         criterion_kd = PKT()
     elif opt.distill == 'kdsvd':
@@ -294,6 +303,7 @@ def main():
         print("==> training...")
 
         time1 = time.time()
+        # train_loss, train_acc = 0, 0
         train_acc, train_loss = train(epoch, train_loader, module_list, criterion_list, optimizer, opt)
         time2 = time.time()
         print('epoch {}, total time {:.2f}'.format(epoch, time2 - time1))
