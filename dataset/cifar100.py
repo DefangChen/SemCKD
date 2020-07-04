@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import os
-import socket
 import numpy as np
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
@@ -20,15 +19,9 @@ std = {
 
 def get_data_folder():
     """
-    return server-dependent path to store the data
+    return the path to store the data
     """
-    hostname = socket.gethostname()
-    if hostname.startswith('visiongpu'):
-        data_folder = '/data/vision/phillipi/rep-learn/datasets'
-    elif hostname.startswith('yonglong-home'):
-        data_folder = '/home/yonglong/Data/data'
-    else:
-        data_folder = './data/'
+    data_folder = './data/'
 
     if not os.path.isdir(data_folder):
         os.makedirs(data_folder)
@@ -60,10 +53,8 @@ class CIFAR100Instance(CIFAR100BackCompat):
     """CIFAR100Instance Dataset.
     """
     def __getitem__(self, index):
-        if self.train:
-            img, target = self.train_data[index], self.train_labels[index]
-        else:
-            img, target = self.test_data[index], self.test_labels[index]
+        
+        img, target = self.data[index], self.targets[index]
 
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
@@ -140,13 +131,9 @@ class CIFAR100InstanceSample(CIFAR100BackCompat):
         self.is_sample = is_sample
 
         num_classes = 100
-        if self.train:
-            num_samples = len(self.train_data)
-            label = self.train_labels
-        else:
-            num_samples = len(self.test_data)
-            label = self.test_labels
-
+        num_samples = len(self.data)
+        label = self.targets
+       
         self.cls_positive = [[] for i in range(num_classes)]
         for i in range(num_samples):
             self.cls_positive[label[i]].append(i)
@@ -170,11 +157,9 @@ class CIFAR100InstanceSample(CIFAR100BackCompat):
         self.cls_negative = np.asarray(self.cls_negative)
 
     def __getitem__(self, index):
-        if self.train:
-            img, target = self.train_data[index], self.train_labels[index]
-        else:
-            img, target = self.test_data[index], self.test_labels[index]
-
+        
+        img, target = self.data[index], self.targets[index]
+        
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
         img = Image.fromarray(img)
@@ -201,7 +186,6 @@ class CIFAR100InstanceSample(CIFAR100BackCompat):
             neg_idx = np.random.choice(self.cls_negative[target], self.k, replace=replace)
             sample_idx = np.hstack((np.asarray([pos_idx]), neg_idx))
             return img, target, index, sample_idx
-
 
 def get_cifar100_dataloaders_sample(batch_size=128, num_workers=8, k=4096, mode='exact',
                                     is_sample=True, percent=1.0):

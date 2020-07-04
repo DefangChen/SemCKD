@@ -20,10 +20,10 @@ class Similarity(nn.Module):
 
         G_s = torch.mm(f_s, torch.t(f_s))
         # G_s = G_s / G_s.norm(2)
-        G_s = torch.nn.functional.normalize(G_s)
+        G_s = torch.nn.functional.normalize(G_s, dim=1)
         G_t = torch.mm(f_t, torch.t(f_t))
         # G_t = G_t / G_t.norm(2)
-        G_t = torch.nn.functional.normalize(G_t)
+        G_t = torch.nn.functional.normalize(G_t, dim=1)
 
         G_diff = G_t - G_s
         loss = (G_diff * G_diff).view(-1, 1).sum(0) / (bsz * bsz)
