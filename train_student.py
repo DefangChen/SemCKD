@@ -22,8 +22,7 @@ from dataset.imagenet import get_imagenet_dataloader, get_dataloader_sample
 
 from helper.util import adjust_learning_rate, save_dict_to_json
 
-from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss, PKT, AAKDLoss, IRGLoss
-from distiller_zoo import PKT, ABLoss, FactorTransfer, KDSVD, FSP, NSTLoss
+from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss, AAKDLoss, IRGLoss
 from crd.criterion import CRDLoss
 
 from helper.loops import train_distill as train, validate
@@ -60,6 +59,7 @@ def parse_option():
     # distillation
     parser.add_argument('--distill', type=str, default='kd', choices=['kd', 'hint', 'attention', 'similarity', 'vid', 
                                                                       'correlation', 'rkd', 'pkt', 'crd', 'aakd', 'irg'])
+    parser.add_argument('--trial', type=str, default='1', help='trial id')
 
     parser.add_argument('-r', '--gamma', type=float, default=1.0, help='weight for classification')
     parser.add_argument('-a', '--alpha', type=float, default=1.0, help='weight balance for KD')
@@ -265,11 +265,11 @@ def main():
     if torch.cuda.is_available():
         cudnn.benchmark = True
         criterion_list.cuda()
-        if torch.cuda.device_count() > 1:
+        if torch.cuda.device_count() > 1 and len(opt.gpu_id.split(',')) > 1:
             #model = nn.DataParallel(model, device_ids=opt.gpu_id).cuda()
             module_list = nn.DataParallel(module_list).cuda()
         else:
-            module_list = nn.DataParallel(module_list).cuda()
+            module_list.cuda()
             
     # validate teacher accuracy
     teacher_acc, _, _ = validate(val_loader, model_t, criterion_cls, opt)
