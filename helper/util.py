@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import json
 import torch
 import numpy as np
 
@@ -46,7 +47,7 @@ def accuracy(output, target, topk=(1,)):
         maxk = max(topk)
         batch_size = target.size(0)
 
-        _, pred = output.topk(maxk, 1, True, True)
+        _, pred = output.topk(maxk, dim = 1, largest = True, sorted = True)
         pred = pred.t()
         correct = pred.eq(target.view(1, -1).expand_as(pred))
 
@@ -55,6 +56,28 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
+
+def save_dict_to_json(d, json_path):
+    """Saves dict of floats in json file
+
+    Args:
+        d: (dict) of float-castable values (np.float, int, float, etc.)
+        json_path: (string) path to json file
+    """
+    with open(json_path, 'w') as f:
+        # We need to convert the values to float for json (it doesn't accept np.array, np.float, )
+        d = {k: v for k, v in d.items()}
+        json.dump(d, f, indent=4)
+
+def load_json_to_dict(json_path):
+    """Loads json file to dict 
+
+    Args:
+        json_path: (string) path to json file
+    """
+    with open(json_path, 'r') as f:
+        params = json.load(f)
+    return params
 
 
 if __name__ == '__main__':

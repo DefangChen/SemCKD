@@ -13,6 +13,7 @@ class Attention(nn.Module):
         self.p = p
 
     def forward(self, g_s, g_t):
+        # only calculate min(len(g_s), len(g_t))-pair at_loss with the help of zip function 
         return [self.at_loss(f_s, f_t) for f_s, f_t in zip(g_s, g_t)]
 
     def at_loss(self, f_s, f_t):
@@ -26,4 +27,5 @@ class Attention(nn.Module):
         return (self.at(f_s) - self.at(f_t)).pow(2).mean()
 
     def at(self, f):
+        # mean(1) function reduce feature map BxCxHxW into BxHxW by averaging the channel response
         return F.normalize(f.pow(self.p).mean(1).view(f.size(0), -1))

@@ -30,6 +30,7 @@ class RKDLoss(nn.Module):
 
         # RKD Angle loss
         with torch.no_grad():
+            # From Bxdim -> 1xBxdim - Bx1xdim = BxBxdim
             td = (teacher.unsqueeze(0) - teacher.unsqueeze(1))
             norm_td = F.normalize(td, p=2, dim=2)
             t_angle = torch.bmm(norm_td, norm_td.transpose(1, 2)).view(-1)
