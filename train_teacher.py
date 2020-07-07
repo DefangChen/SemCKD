@@ -6,6 +6,8 @@ import time
 
 import torch
 import torch.optim as optim
+import torch.multiprocessing as mp
+import torch.distributed as dist
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import tensorboard_logger as tb_logger
@@ -22,7 +24,7 @@ def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
     # baisc
-    parser.add_argument('--print_freq', type=int, default=200, help='print frequency')
+    parser.add_argument('--print-freq', type=int, default=200, help='print frequency')
     parser.add_argument('--save_freq', type=int, default=40, help='save frequency')
     parser.add_argument('--batch_size', type=int, default=64, help='batch_size')
     parser.add_argument('--num_workers', type=int, default=8, help='num of workers to use')
@@ -46,10 +48,18 @@ def parse_option():
 
     parser.add_argument('-t', '--trial', type=int, default=0, help='the experiment id')
 
-    parser.add_argument('--use_lmdb', action='store_true') # default=false
+    parser.add_argument('--use-lmdb', action='store_true') # default=false
+
+    parser.add_argument('--multiprocessing-distributed', action='store_true',
+                    help='Use multi-processing distributed training to launch '
+                         'N processes per node, which has N GPUs. This is the '
+                         'fastest way to use PyTorch for either single node or '
+                         'multi node data parallel training')
+    parser.add_argument('--dist-url', default='tcp://127.0.0.1:23451', type=str,
+                    help='url used to set up distributed training')
     
     opt = parser.parse_args()
-    
+
     # set different learning rate from these 4 models
     if opt.model in ['MobileNetV2', 'ShuffleV1', 'ShuffleV2']:
         opt.learning_rate = 0.01
@@ -76,27 +86,52 @@ def parse_option():
 
     return opt
 
-
+best_acc = 0
+total_time = time.time()
 def main():
-    total_time = time.time()
-    best_acc = 0
-
     opt = parse_option()
     
     # ASSIGN CUDA_ID
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu_id
-    
-    # dataloader
-    if opt.dataset == 'cifar100':
-        train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size, num_workers=opt.num_workers)
-        n_cls = 100
-    elif opt.dataset == 'imagenet':
-        train_loader, val_loader = get_imagenet_dataloader(batch_size=opt.batch_size, num_workers=opt.num_workers, use_lmdb=opt.use_lmdb)
-        n_cls = 1000
+
+    ngpus_per_node = torch.cuda.device_count()
+    opt.ngpus_per_node = ngpus_per_node
+    if opt.multiprocessing_distributed:
+        ctx = mp.get_context('spawn')
+        meter_queue = ctx.JoinableQueue()
+        # Since we have ngpus_per_node processes per node, the total world_size
+        # needs to be adjusted accordingly
+        world_size = 1
+        opt.world_size = ngpus_per_node * world_size
+        # Use torch.multiprocessing.spawn to launch distributed processes: the
+        # main_worker process function
+        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, opt, meter_queue))
     else:
-        raise NotImplementedError(opt.dataset)
+        main_worker(None if ngpus_per_node > 1 else opt.gpu_id, ngpus_per_node, opt)
+
+def main_worker(gpu, ngpus_per_node, opt, meter_queue = None):
+    global best_acc, total_time
+    opt.gpu = gpu
+    opt.gpu_id = gpu
+
+    if opt.gpu is not None:
+        print("Use GPU: {} for training".format(opt.gpu))
+
+    if opt.multiprocessing_distributed:
+        # Only one node now.
+        opt.rank = int(gpu)
+        dist_backend = 'nccl'
+        dist.init_process_group(backend=dist_backend, init_method=opt.dist_url,
+                                world_size=opt.world_size, rank=opt.rank)
 
     # model
+    if opt.dataset == 'cifar100':
+        n_cls = 100
+    elif opt.dataset == 'imagenet':
+        n_cls = 1000
+    else:
+        n_cls = None
+
     model = model_dict[opt.model](num_classes=n_cls)
 
     # optimizer
@@ -108,19 +143,49 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     if torch.cuda.is_available():
-        cudnn.benchmark = True
-        criterion = criterion.cuda()
-        if torch.cuda.device_count() > 1:
-            #model = nn.DataParallel(model, device_ids=opt.gpu_id).cuda()
-            model = nn.DataParallel(model).cuda()
+        # For multiprocessing distributed, DistributedDataParallel constructor
+        # should always set the single device scope, otherwise,
+        # DistributedDataParallel will use all available devices.
+        if opt.multiprocessing_distributed:
+            if opt.gpu is not None:
+                torch.cuda.set_device(opt.gpu)
+                model.cuda(opt.gpu)
+                # When using a single GPU per process and per
+                # DistributedDataParallel, we need to divide the batch size
+                # ourselves based on the total number of GPUs we have
+                opt.batch_size = int(opt.batch_size / ngpus_per_node)
+                opt.num_workers = int((opt.num_workers + ngpus_per_node - 1) / ngpus_per_node)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[opt.gpu])
+            else:
+                print('multiprocessing_distributed must be with a specifiec gpu id')
         else:
-            model = model.cuda() 
+            criterion = criterion.cuda()
+            if torch.cuda.device_count() > 1:
+                #model = nn.DataParallel(model, device_ids=opt.gpu_id).cuda()
+                model = nn.DataParallel(model).cuda()
+            else:
+                model = model.cuda()
+
+    cudnn.benchmark = True
+
+    # dataloader
+    if opt.dataset == 'cifar100':
+        train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size, num_workers=opt.num_workers)
+    elif opt.dataset == 'imagenet':
+        train_loader, val_loader, train_sampler, test_sampler = get_imagenet_dataloader(
+                    batch_size=opt.batch_size, num_workers=opt.num_workers, use_lmdb=opt.use_lmdb,
+                    multiprocessing_distributed=opt.multiprocessing_distributed)
+    else:
+        raise NotImplementedError(opt.dataset)
 
     # tensorboard
     logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
 
     # routine
     for epoch in range(1, opt.epochs + 1):
+        if opt.multiprocessing_distributed:
+            train_sampler.set_epoch(epoch)
+            test_sampler.set_epoch(epoch)
 
         adjust_learning_rate(epoch, opt, optimizer)
         print("==> training...")
@@ -133,46 +198,49 @@ def main():
         logger.log_value('train_acc', train_acc, epoch)
         logger.log_value('train_loss', train_loss, epoch)
 
-        test_acc, test_acc_top5, test_loss = validate(val_loader, model, criterion, opt)
-        print(' ** Acc@1 {:.3f}, Acc@5 {:.3f}'.format(test_acc, test_acc_top5))
-        
-        logger.log_value('test_acc', test_acc, epoch)
-        logger.log_value('test_acc_top5', test_acc_top5, epoch)
-        logger.log_value('test_loss', test_loss, epoch)
+        test_acc, test_acc_top5, test_loss = validate(val_loader, model, criterion, opt, meter_queue)
 
-        # save the best model
-        if test_acc > best_acc:
-            best_acc = test_acc
-            state = {
-                'epoch': epoch,
-                'model': model.state_dict(),
-                'best_acc': best_acc,
-                'optimizer': optimizer.state_dict(),
-            }
-            save_file = os.path.join(opt.save_folder, '{}_best.pth'.format(opt.model))
+        if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
+            print(' ** Acc@1 {:.3f}, Acc@5 {:.3f}'.format(test_acc, test_acc_top5))
             
-            test_merics = { 'test_loss': test_loss,
-                            'test_acc': test_acc,
-                            'test_acc_top5': test_acc_top5,
-                            'epoch': epoch}
-            
-            save_dict_to_json(test_merics, os.path.join(opt.save_folder, "test_best_metrics.json"))
-            
-            print('saving the best model!')
-            torch.save(state, save_file)
+            logger.log_value('test_acc', test_acc, epoch)
+            logger.log_value('test_acc_top5', test_acc_top5, epoch)
+            logger.log_value('test_loss', test_loss, epoch)
 
-    # This best accuracy is only for printing purpose.
-    print('best accuracy:', best_acc)
+            # save the best model
+            if test_acc > best_acc:
+                best_acc = test_acc
+                state = {
+                    'epoch': epoch,
+                    'model': model.state_dict(),
+                    'best_acc': best_acc,
+                    'optimizer': optimizer.state_dict(),
+                }
+                save_file = os.path.join(opt.save_folder, '{}_best.pth'.format(opt.model))
+                
+                test_merics = { 'test_loss': test_loss,
+                                'test_acc': test_acc,
+                                'test_acc_top5': test_acc_top5,
+                                'epoch': epoch}
+                
+                save_dict_to_json(test_merics, os.path.join(opt.save_folder, "test_best_metrics.json"))
+                
+                print('saving the best model!')
+                torch.save(state, save_file)
 
-    # save parameters
-    state = {k: v for k, v in opt._get_kwargs()}
-    
-    # No. parameters(M)
-    num_params = (sum(p.numel() for p in model.parameters())/1000000.0)
-    state['Total params'] = num_params
-    state['Total time'] =  time.time() - total_time
-    params_json_path = os.path.join(opt.save_folder, "parameters.json") 
-    save_dict_to_json(state, params_json_path)
+    if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
+        # This best accuracy is only for printing purpose.
+        print('best accuracy:', best_acc)
+
+        # save parameters
+        state = {k: v for k, v in opt._get_kwargs()}
+
+        # No. parameters(M)
+        num_params = (sum(p.numel() for p in model.parameters())/1000000.0)
+        state['Total params'] = num_params
+        state['Total time'] =  time.time() - total_time
+        params_json_path = os.path.join(opt.save_folder, "parameters.json") 
+        save_dict_to_json(state, params_json_path)
     
 if __name__ == '__main__':
     main()

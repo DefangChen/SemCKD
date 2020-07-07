@@ -6,6 +6,7 @@ from __future__ import print_function
 import os
 import numpy as np
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from torchvision import datasets
 from torchvision import transforms
 
@@ -177,7 +178,7 @@ def get_dataloader_sample(dataset='imagenet', batch_size=128, num_workers=8, is_
     return train_loader, test_loader, len(train_set), len(train_set.classes)
 
 
-def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, is_instance=False, use_lmdb=False):
+def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, is_instance=False, use_lmdb=False, multiprocessing_distributed=False):
     """
     Data Loader for imagenet
     """
@@ -203,7 +204,7 @@ def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, 
 
     train_folder = os.path.join(data_folder, 'train')
     test_folder = os.path.join(data_folder, 'val')
-    if use_lmbd:
+    if use_lmdb:
         train_lmdb_path = os.path.join(data_folder, 'train.lmdb')
         test_lmdb_path = os.path.join(data_folder, 'val.lmdb')
 
@@ -221,19 +222,28 @@ def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, 
     else:
         test_set = datasets.ImageFolder(test_folder, transform=test_transform)
 
+    if multiprocessing_distributed:
+        train_sampler = DistributedSampler(train_set)
+        test_sampler = DistributedSampler(test_set)
+    else:
+        train_sampler = None
+        test_sampler = None
+
     train_loader = DataLoader(train_set,
                               batch_size=batch_size,
-                              shuffle=True,
+                              shuffle=(train_sampler is None),
                               num_workers=num_workers,
-                              pin_memory=True)
+                              pin_memory=True,
+                              sampler=train_sampler)
 
     test_loader = DataLoader(test_set,
                              batch_size=batch_size,
                              shuffle=False,
-                             num_workers=num_workers//2,
-                             pin_memory=True)
+                             num_workers=num_workers,
+                             pin_memory=True,
+                             sampler=test_sampler)
 
     if is_instance:
         return train_loader, test_loader, n_data
     else:
-        return train_loader, test_loader
+        return train_loader, test_loader, train_sampler, test_sampler

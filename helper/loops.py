@@ -21,9 +21,10 @@ def train_vanilla(epoch, train_loader, model, criterion, optimizer, opt):
         data_time.update(time.time() - end)
         
         # input = input.float()
+        if opt.gpu is not None:
+            input = input.cuda(opt.gpu, non_blocking=True)
         if torch.cuda.is_available():
-            input = input.cuda()
-            target = target.cuda()
+            target = target.cuda(opt.gpu, non_blocking=True)
 
         # ===================forward=====================
         output = model(input)
@@ -181,9 +182,10 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
     return top1.avg, top5.avg, losses.avg
 
 
-def validate(val_loader, model, criterion, opt):
+def validate(val_loader, model, criterion, opt, meter_queue = None):
     """validation"""
     
+    batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
@@ -194,11 +196,10 @@ def validate(val_loader, model, criterion, opt):
     with torch.no_grad():
         end = time.time()
         for idx, (input, target) in enumerate(val_loader):
-
-            # input = input.float()
+            if opt.gpu is not None:
+                input = input.cuda(opt.gpu, non_blocking=True)
             if torch.cuda.is_available():
-                input = input.cuda()
-                target = target.cuda()
+                target = target.cuda(opt.gpu, non_blocking=True)
 
             # compute output
             output = model(input)
@@ -210,12 +211,34 @@ def validate(val_loader, model, criterion, opt):
             top1.update(metrics[0].item(), input.size(0))
             top5.update(metrics[1].item(), input.size(0))
 
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
             if idx % opt.print_freq == 0:
                 print('Test: [{0}/{1}]\t'
+                      'Time: {batch_time.avg:.3f}\t'
                       'Loss {loss.avg:.4f}\t'
                       'Acc@1 {top1.avg:.3f}\t'
                       'Acc@5 {top5.avg:.3f}'.format(
-                       idx, len(val_loader), loss=losses,
+                       idx, len(val_loader), batch_time=batch_time, loss=losses,
                        top1=top1, top5=top5))
+
+        if opt.multiprocessing_distributed:
+            if opt.rank % opt.ngpus_per_node == 0:
+                for i in range(opt.ngpus_per_node - 1):
+                    start_time = time.time()
+                    # In fact the other three is not used here.
+                    top1_peer, top5_peer, batch_time_peer, losses_peer = meter_queue.get()
+                    top1.merge(top1_peer)
+                    top5.merge(top5_peer)
+                    losses.merge(losses_peer)
+                    meter_queue.task_done()
+            else:
+                meter_queue.put((top1, top5, batch_time, losses))
+                # TODO: This cost about 2 seconds idle on each processor.
+                #       Without this may cause problem if
+                #       next round putting begins before ending of this round.
+                meter_queue.join()
 
     return top1.avg, top5.avg, losses.avg

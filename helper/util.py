@@ -40,6 +40,12 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+    def merge(self, peer):
+        self.val = peer.val
+        self.sum += peer.sum
+        self.count += peer.count
+        self.avg = self.sum / self.count
+
 
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
