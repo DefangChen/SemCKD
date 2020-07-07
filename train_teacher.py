@@ -46,6 +46,8 @@ def parse_option():
 
     parser.add_argument('-t', '--trial', type=int, default=0, help='the experiment id')
 
+    parser.add_argument('--use_lmdb', action='store_true') # default=false
+    
     opt = parser.parse_args()
     
     # set different learning rate from these 4 models
@@ -89,7 +91,7 @@ def main():
         train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size, num_workers=opt.num_workers)
         n_cls = 100
     elif opt.dataset == 'imagenet':
-        train_loader, val_loader = get_imagenet_dataloader(batch_size=opt.batch_size, num_workers=opt.num_workers)
+        train_loader, val_loader = get_imagenet_dataloader(batch_size=opt.batch_size, num_workers=opt.num_workers, use_lmdb=opt.use_lmdb)
         n_cls = 1000
     else:
         raise NotImplementedError(opt.dataset)

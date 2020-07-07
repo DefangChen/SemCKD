@@ -118,3 +118,6 @@ venv.bak/
 
 # trained models
 save/*
+
+# log
+log

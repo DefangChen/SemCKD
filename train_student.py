@@ -83,7 +83,7 @@ def parse_option():
     parser.add_argument('--transform_layer_s', nargs='+', type=int, default = [])
 
     # switch for edge transformation
-    parser.add_argument('--no_edge_transform', action='store_true')
+    parser.add_argument('--no_edge_transform', action='store_true') # default=false
 
     opt = parser.parse_args()
 

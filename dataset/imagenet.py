@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision import transforms
 
+from dataset.folder2lmdb import ImageFolderLMDB
 
 def get_data_folder():
     """
@@ -176,7 +177,7 @@ def get_dataloader_sample(dataset='imagenet', batch_size=128, num_workers=8, is_
     return train_loader, test_loader, len(train_set), len(train_set.classes)
 
 
-def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, is_instance=False):
+def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, is_instance=False, use_lmdb=False):
     """
     Data Loader for imagenet
     """
@@ -202,14 +203,23 @@ def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, 
 
     train_folder = os.path.join(data_folder, 'train')
     test_folder = os.path.join(data_folder, 'val')
+    if use_lmbd:
+        train_lmdb_path = os.path.join(data_folder, 'train.lmdb')
+        test_lmdb_path = os.path.join(data_folder, 'val.lmdb')
 
     if is_instance:
         train_set = ImageFolderInstance(train_folder, transform=train_transform)
         n_data = len(train_set)
     else:
-        train_set = datasets.ImageFolder(train_folder, transform=train_transform)
+        if use_lmdb:
+            train_set = ImageFolderLMDB(train_lmdb_path, transform=train_transform)
+        else:
+            train_set = datasets.ImageFolder(train_folder, transform=train_transform)
 
-    test_set = datasets.ImageFolder(test_folder, transform=test_transform)
+    if use_lmdb:
+        test_set = ImageFolderLMDB(test_lmdb_path, transform=test_transform)
+    else:
+        test_set = datasets.ImageFolder(test_folder, transform=test_transform)
 
     train_loader = DataLoader(train_set,
                               batch_size=batch_size,
