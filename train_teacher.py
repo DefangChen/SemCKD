@@ -172,7 +172,7 @@ def main_worker(gpu, ngpus_per_node, opt, meter_queue = None):
     if opt.dataset == 'cifar100':
         train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size, num_workers=opt.num_workers)
     elif opt.dataset == 'imagenet':
-        train_loader, val_loader, train_sampler, test_sampler = get_imagenet_dataloader(
+        train_loader, val_loader, train_sampler = get_imagenet_dataloader(
                     batch_size=opt.batch_size, num_workers=opt.num_workers, use_lmdb=opt.use_lmdb,
                     multiprocessing_distributed=opt.multiprocessing_distributed)
     else:
@@ -185,7 +185,7 @@ def main_worker(gpu, ngpus_per_node, opt, meter_queue = None):
     for epoch in range(1, opt.epochs + 1):
         if opt.multiprocessing_distributed:
             train_sampler.set_epoch(epoch)
-            test_sampler.set_epoch(epoch)
+            # No test_sampler because epoch is random seed, not needed in sequential testing.
 
         adjust_learning_rate(epoch, opt, optimizer)
         print("==> training...")

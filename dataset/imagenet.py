@@ -224,7 +224,7 @@ def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, 
 
     if multiprocessing_distributed:
         train_sampler = DistributedSampler(train_set)
-        test_sampler = DistributedSampler(test_set)
+        test_sampler = DistributedSampler(test_set, shuffle=False)
     else:
         train_sampler = None
         test_sampler = None
@@ -246,4 +246,4 @@ def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, 
     if is_instance:
         return train_loader, test_loader, n_data
     else:
-        return train_loader, test_loader, train_sampler, test_sampler
+        return train_loader, test_loader, train_sampler
