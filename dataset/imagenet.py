@@ -178,7 +178,7 @@ def get_dataloader_sample(dataset='imagenet', batch_size=128, num_workers=8, is_
     return train_loader, test_loader, len(train_set), len(train_set.classes)
 
 
-def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, is_instance=False, use_lmdb=False, multiprocessing_distributed=False):
+def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, use_lmdb=False, multiprocessing_distributed=False):
     """
     Data Loader for imagenet
     """
@@ -208,14 +208,10 @@ def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, 
         train_lmdb_path = os.path.join(data_folder, 'train.lmdb')
         test_lmdb_path = os.path.join(data_folder, 'val.lmdb')
 
-    if is_instance:
-        train_set = ImageFolderInstance(train_folder, transform=train_transform)
-        n_data = len(train_set)
+    if use_lmdb:
+        train_set = ImageFolderLMDB(train_lmdb_path, transform=train_transform)
     else:
-        if use_lmdb:
-            train_set = ImageFolderLMDB(train_lmdb_path, transform=train_transform)
-        else:
-            train_set = datasets.ImageFolder(train_folder, transform=train_transform)
+        train_set = datasets.ImageFolder(train_folder, transform=train_transform)
 
     if use_lmdb:
         test_set = ImageFolderLMDB(test_lmdb_path, transform=test_transform)
@@ -243,7 +239,4 @@ def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, 
                              pin_memory=True,
                              sampler=test_sampler)
 
-    if is_instance:
-        return train_loader, test_loader, n_data
-    else:
-        return train_loader, test_loader, train_sampler
+    return train_loader, test_loader, train_sampler

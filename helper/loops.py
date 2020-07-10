@@ -46,12 +46,13 @@ def train_vanilla(epoch, train_loader, model, criterion, optimizer, opt):
         # print info
         if idx % opt.print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
+                  'GPU {3}\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.avg:.4f}\t'
                   'Acc@1 {top1.avg:.3f}\t'
                   'Acc@5 {top5.avg:.3f}'.format(
-                   epoch, idx, len(train_loader), batch_time=batch_time,
+                   epoch, idx, len(train_loader), opt.gpu, batch_time=batch_time,
                    data_time=data_time, loss=losses, top1=top1, top5=top5))
             sys.stdout.flush()
             
@@ -77,30 +78,36 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
     model_s = module_list[0]
     model_t = module_list[-1]
 
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
 
+    end = time.time()
     for idx, data in enumerate(train_loader):
+        data_time.update(time.time() - end)
+
         if opt.distill in ['crd']:
             input, target, index, contrast_idx = data
         else:
-            input, target, index = data
+            input, target = data
+
         if target.shape[0] < opt.batch_size:
             continue
-        # input = input.float()
-        if torch.cuda.is_available():
-            input = input.cuda()
-            target = target.cuda()
-            index = index.cuda()
-            if opt.distill in ['crd']:
-                contrast_idx = contrast_idx.cuda()
 
+        if opt.gpu is not None:
+            input = input.cuda(opt.gpu, non_blocking=True)
+        if torch.cuda.is_available():
+            target = target.cuda(opt.gpu, non_blocking=True)
+            if opt.distill in ['crd']:
+                index = index.cuda()
+                contrast_idx = contrast_idx.cuda()
+    
         # ===================forward=====================
-        preact = False
-        feat_s, logit_s = model_s(input, is_feat=True, preact=preact)
+        feat_s, logit_s = model_s(input, is_feat=True)
         with torch.no_grad():
-            feat_t, logit_t = model_t(input, is_feat=True, preact=preact)
+            feat_t, logit_t = model_t(input, is_feat=True)
             feat_t = [f.detach() for f in feat_t]
 
         # cls + kl div
@@ -164,6 +171,8 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
         metrics = accuracy(logit_s, target, topk=(1, 5))
         top1.update(metrics[0].item(), input.size(0))
         top5.update(metrics[1].item(), input.size(0))
+        batch_time.update(time.time() - end)
+        end = time.time()
 
         # ===================backward=====================
         optimizer.zero_grad()
@@ -173,13 +182,17 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
         # print info
         if idx % opt.print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
+                  'GPU {3}\t'
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.avg:.4f}\t'
                   'Acc@1 {top1.avg:.3f}\t'
                   'Acc@5 {top5.avg:.3f}'.format(
-                epoch, idx, len(train_loader), loss=losses, top1=top1, top5=top5))
+                epoch, idx, len(train_loader), opt.gpu, loss=losses, top1=top1, top5=top5,
+                batch_time=batch_time, data_time=data_time))
             sys.stdout.flush()
 
-    return top1.avg, top5.avg, losses.avg
+    return top1.avg, top5.avg, losses.avg, data_time.avg
 
 
 def validate(val_loader, model, criterion, opt, meter_queue = None):
@@ -217,11 +230,12 @@ def validate(val_loader, model, criterion, opt, meter_queue = None):
 
             if idx % opt.print_freq == 0:
                 print('Test: [{0}/{1}]\t'
+                      'GPU: {2}\t'
                       'Time: {batch_time.avg:.3f}\t'
                       'Loss {loss.avg:.4f}\t'
                       'Acc@1 {top1.avg:.3f}\t'
                       'Acc@5 {top5.avg:.3f}'.format(
-                       idx, len(val_loader), batch_time=batch_time, loss=losses,
+                       idx, len(val_loader), opt.gpu, batch_time=batch_time, loss=losses,
                        top1=top1, top5=top5))
 
         if opt.multiprocessing_distributed:

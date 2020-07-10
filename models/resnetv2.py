@@ -247,7 +247,7 @@ class ResNet(nn.Module):
             x = torch.flatten(x, 1)
             f5 = x
             x = self.fc(x)
-            return [f0, f1, f2, f3, f4, f5], out
+            return [f0, f1, f2, f3, f4, f5], x
         else:
             return self._forward_impl(x)
 

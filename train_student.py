@@ -10,6 +10,8 @@ import time
 
 import torch
 import torch.optim as optim
+import torch.multiprocessing as mp
+import torch.distributed as dist
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import tensorboard_logger as tb_logger
@@ -32,7 +34,7 @@ def parse_option():
     parser = argparse.ArgumentParser('argument for training')
     
     # baisc
-    parser.add_argument('--print_freq', type=int, default=200, help='print frequency')
+    parser.add_argument('--print-freq', type=int, default=200, help='print frequency')
     parser.add_argument('--batch_size', type=int, default=64, help='batch_size')
     parser.add_argument('--num_workers', type=int, default=8, help='num of workers to use')
     parser.add_argument('--epochs', type=int, default=240, help='number of training epochs')
@@ -54,7 +56,7 @@ def parse_option():
                                  'resnet8x4', 'resnet32x4', 'wrn_16_1', 'wrn_16_2', 'wrn_40_1', 'wrn_40_2',
                                  'vgg8', 'vgg11', 'vgg13', 'vgg16', 'vgg19', 'ResNet50',
                                  'MobileNetV2', 'ShuffleV1', 'ShuffleV2'])
-    parser.add_argument('--path_t', type=str, default=None, help='teacher model snapshot')
+    parser.add_argument('--path-t', type=str, default=None, help='teacher model snapshot')
 
     # distillation
     parser.add_argument('--distill', type=str, default='kd', choices=['kd', 'hint', 'attention', 'similarity', 'vid', 
@@ -84,6 +86,16 @@ def parse_option():
 
     # switch for edge transformation
     parser.add_argument('--no_edge_transform', action='store_true') # default=false
+    
+    parser.add_argument('--use-lmdb', action='store_true') # default=false
+
+    parser.add_argument('--multiprocessing-distributed', action='store_true',
+                    help='Use multi-processing distributed training to launch '
+                         'N processes per node, which has N GPUs. This is the '
+                         'fastest way to use PyTorch for either single node or '
+                         'multi node data parallel training')
+    parser.add_argument('--dist-url', default='tcp://127.0.0.1:23451', type=str,
+                    help='url used to set up distributed training')
 
     opt = parser.parse_args()
 
@@ -139,41 +151,54 @@ def load_teacher(model_path, n_cls):
     print('==> done')
     return model
 
+total_time = time.time()
+best_acc = 0
 
 def main():
     
-    total_time = time.time()
-    best_acc = 0
-
     opt = parse_option()
-    print(opt)
     
     # ASSIGN CUDA_ID
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu_id
     
+    ngpus_per_node = torch.cuda.device_count()
+    opt.ngpus_per_node = ngpus_per_node
+    if opt.multiprocessing_distributed:
+        ctx = mp.get_context('spawn')
+        meter_queue = ctx.JoinableQueue()
+        # Since we have ngpus_per_node processes per node, the total world_size
+        # needs to be adjusted accordingly
+        world_size = 1
+        opt.world_size = ngpus_per_node * world_size
+        # Use torch.multiprocessing.spawn to launch distributed processes: the
+        # main_worker process function
+        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, opt, meter_queue))
+    else:
+        main_worker(None if ngpus_per_node > 1 else opt.gpu_id, ngpus_per_node, opt)
+
+def main_worker(gpu, ngpus_per_node, opt, meter_queue = None):
+    global best_acc, total_time
+    opt.gpu = gpu
+    opt.gpu_id = gpu
+
+    if opt.gpu is not None:
+        print("Use GPU: {} for training".format(opt.gpu))
+
+    if opt.multiprocessing_distributed:
+        # Only one node now.
+        opt.rank = int(gpu)
+        dist_backend = 'nccl'
+        dist.init_process_group(backend=dist_backend, init_method=opt.dist_url,
+                                world_size=opt.world_size, rank=opt.rank)
+        opt.batch_size = int(opt.batch_size / ngpus_per_node)
+        opt.num_workers = int((opt.num_workers + ngpus_per_node - 1) / ngpus_per_node)
+
     # tensorboard logger
     logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
 
-    # dataloader
     if opt.dataset == 'cifar100':
-        if opt.distill in ['crd']:
-            train_loader, val_loader, n_data = get_cifar100_dataloaders_sample(batch_size=opt.batch_size,
-                                                                               num_workers=opt.num_workers,
-                                                                               k=opt.nce_k,
-                                                                               mode=opt.mode)
-        else:
-            train_loader, val_loader, n_data = get_cifar100_dataloaders(batch_size=opt.batch_size,
-                                                                        num_workers=opt.num_workers,
-                                                                        is_instance=True)
         n_cls = 100
     elif opt.dataset == 'imagenet':
-        if opt.distill in ['crd']:
-            train_loader, val_loader, n_data = get_dataloader_sample(batch_size=opt.batch_size, num_workers=opt.num_workers,
-                                                                    k=opt.nce_k, is_sample=False)
-        else:
-            train_loader, val_loader, n_data = get_imagenet_dataloader(batch_size=opt.batch_size,
-                                                                        num_workers=opt.num_workers,
-                                                                        is_instance=True)
         n_cls = 1000
     else:
         raise NotImplementedError(opt.dataset)
@@ -263,69 +288,108 @@ def main():
     module_list.append(model_t)
     
     if torch.cuda.is_available():
-        cudnn.benchmark = True
-        criterion_list.cuda()
-        if torch.cuda.device_count() > 1 and len(opt.gpu_id.split(',')) > 1:
-            #model = nn.DataParallel(model, device_ids=opt.gpu_id).cuda()
-            module_list = nn.DataParallel(module_list).cuda()
+        # For multiprocessing distributed, DistributedDataParallel constructor
+        # should always set the single device scope, otherwise,
+        # DistributedDataParallel will use all available devices.
+        if opt.multiprocessing_distributed:
+            if opt.gpu is not None:
+                torch.cuda.set_device(opt.gpu)
+                module_list.cuda(opt.gpu)
+                distributed_modules = []
+                for module in module_list:
+                    distributed_modules.append(torch.nn.parallel.DistributedDataParallel(module, device_ids=[opt.gpu]))
+                module_list = distributed_modules
+                criterion_list.cuda(opt.gpu)
+            else:
+                print('multiprocessing_distributed must be with a specifiec gpu id')
         else:
+            criterion_list.cuda()
             module_list.cuda()
-            
+        cudnn.benchmark = True
+
+    # dataloader
+    if opt.dataset == 'cifar100':
+        if opt.distill in ['crd']:
+            train_loader, val_loader, n_data = get_cifar100_dataloaders_sample(batch_size=opt.batch_size,
+                                                                               num_workers=opt.num_workers,
+                                                                               k=opt.nce_k,
+                                                                               mode=opt.mode)
+        else:
+            train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size,
+                                                                        num_workers=opt.num_workers)
+    elif opt.dataset == 'imagenet':
+        if opt.distill in ['crd']:
+            train_loader, val_loader, n_data = get_dataloader_sample(batch_size=opt.batch_size, num_workers=opt.num_workers,
+                                                                    k=opt.nce_k, is_sample=False)
+        else:
+            train_loader, val_loader, train_sampler = get_imagenet_dataloader(batch_size=opt.batch_size,
+                                                                        num_workers=opt.num_workers,
+                                                                        multiprocessing_distributed=opt.multiprocessing_distributed)
+    else:
+        raise NotImplementedError(opt.dataset)
+
     # validate teacher accuracy
-    teacher_acc, _, _ = validate(val_loader, model_t, criterion_cls, opt)
-    print('teacher accuracy: ', teacher_acc)
+    teacher_acc, _, _ = validate(val_loader, model_t, criterion_cls, opt, meter_queue)
+    if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
+        print('teacher accuracy: ', teacher_acc)
     
     # routine
     for epoch in range(1, opt.epochs + 1):
+        if opt.multiprocessing_distributed:
+            train_sampler.set_epoch(epoch)
 
         adjust_learning_rate(epoch, opt, optimizer)
         print("==> training...")
 
         time1 = time.time()
-        train_acc, train_acc_top5, train_loss = train(epoch, train_loader, module_list, criterion_list, optimizer, opt)
+        train_acc, train_acc_top5, train_loss, data_time = train(epoch, train_loader, module_list, criterion_list, optimizer, opt)
         time2 = time.time()
-        print(' * Epoch {}, Acc@1 {:.3f}, Acc@5 {:.3f}, Time {:.2f}'.format(epoch, train_acc, train_acc_top5, time2 - time1))
+        print(' * Epoch {}, GPU {}, Acc@1 {:.3f}, Acc@5 {:.3f}, Time {:.2f}, Data {:.2f}'.format(epoch, opt.gpu, train_acc, train_acc_top5, time2 - time1, data_time))
         
+        # TODO: Is this logger multiprocess safe?
         logger.log_value('train_acc', train_acc, epoch)
         logger.log_value('train_loss', train_loss, epoch)
 
-        test_acc, test_acc_top5, test_loss = validate(val_loader, model_s, criterion_cls, opt)
-        print(' ** Acc@1 {:.3f}, Acc@5 {:.3f}'.format(test_acc, test_acc_top5))
-        
-        logger.log_value('test_acc', test_acc, epoch)
-        logger.log_value('test_loss', test_loss, epoch)
-        logger.log_value('test_acc_top5', test_acc_top5, epoch)
+        test_acc, test_acc_top5, test_loss = validate(val_loader, model_s, criterion_cls, opt, meter_queue)
 
-        # save the best model
-        if test_acc > best_acc:
-            best_acc = test_acc
-            state = {
-                'epoch': epoch,
-                'model': model_s.state_dict(),
-                'best_acc': best_acc,
-            }
-            save_file = os.path.join(opt.save_folder, '{}_best.pth'.format(opt.model_s))
+        if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
+            print(' ** Acc@1 {:.3f}, Acc@5 {:.3f}'.format(test_acc, test_acc_top5))
             
-            test_merics = {'test_loss': test_loss,
-                            'test_acc': test_acc,
-                            'test_acc_top5': test_acc_top5,
-                            'epoch': epoch}
-            
-            save_dict_to_json(test_merics, os.path.join(opt.save_folder, "test_best_metrics.json"))
-            print('saving the best model!')
-            torch.save(state, save_file)
-            
-    # This best accuracy is only for printing purpose.
-    print('best accuracy:', best_acc)
-    
-    # save parameters
-    save_state = {k: v for k, v in opt._get_kwargs()}
-    # No. parameters(M)
-    num_params = (sum(p.numel() for p in model_s.parameters())/1000000.0)
-    save_state['Total params'] = num_params
-    save_state['Total time'] =  (time.time() - total_time)/3600.0
-    params_json_path = os.path.join(opt.save_folder, "parameters.json") 
-    save_dict_to_json(save_state, params_json_path)
+            logger.log_value('test_acc', test_acc, epoch)
+            logger.log_value('test_loss', test_loss, epoch)
+            logger.log_value('test_acc_top5', test_acc_top5, epoch)
+
+            # save the best model
+            if test_acc > best_acc:
+                best_acc = test_acc
+                state = {
+                    'epoch': epoch,
+                    'model': model_s.state_dict(),
+                    'best_acc': best_acc,
+                }
+                save_file = os.path.join(opt.save_folder, '{}_best.pth'.format(opt.model_s))
+                
+                test_merics = {'test_loss': test_loss,
+                                'test_acc': test_acc,
+                                'test_acc_top5': test_acc_top5,
+                                'epoch': epoch}
+                
+                save_dict_to_json(test_merics, os.path.join(opt.save_folder, "test_best_metrics.json"))
+                print('saving the best model!')
+                torch.save(state, save_file)
+                
+    if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
+        # This best accuracy is only for printing purpose.
+        print('best accuracy:', best_acc)
+        
+        # save parameters
+        save_state = {k: v for k, v in opt._get_kwargs()}
+        # No. parameters(M)
+        num_params = (sum(p.numel() for p in model_s.parameters())/1000000.0)
+        save_state['Total params'] = num_params
+        save_state['Total time'] =  (time.time() - total_time)/3600.0
+        params_json_path = os.path.join(opt.save_folder, "parameters.json") 
+        save_dict_to_json(save_state, params_json_path)
 
 if __name__ == '__main__':
     main()
