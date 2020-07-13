@@ -3,6 +3,7 @@ from __future__ import print_function
 import json
 import torch
 import numpy as np
+import torch.distributed as dist
 
 
 def adjust_learning_rate_new(epoch, optimizer, LUT):
@@ -85,6 +86,11 @@ def load_json_to_dict(json_path):
         params = json.load(f)
     return params
 
+def reduce_tensor(tensor, world_size = 1):
+    rt = tensor.clone()
+    dist.all_reduce(rt, op=dist.ReduceOp.SUM)
+    rt /= world_size
+    return rt
 
 if __name__ == '__main__':
 

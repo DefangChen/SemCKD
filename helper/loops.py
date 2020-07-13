@@ -4,7 +4,7 @@ import sys
 import time
 import torch
 
-from .util import AverageMeter, accuracy
+from .util import AverageMeter, accuracy, reduce_tensor
 
 def train_vanilla(epoch, train_loader, model, criterion, optimizer, opt):
     """vanilla training"""
@@ -16,8 +16,15 @@ def train_vanilla(epoch, train_loader, model, criterion, optimizer, opt):
     top1 = AverageMeter()
     top5 = AverageMeter()
 
+    n_batch = len(train_loader) if opt.dali is None else (train_loader._size + opt.batch_size - 1) // opt.batch_size
+
     end = time.time()
-    for idx, (input, target) in enumerate(train_loader):
+    for idx, batch_data in enumerate(train_loader):
+        if opt.dali is None:
+            input, target = batch_data
+        else:
+            input, target = batch_data[0]['data'], batch_data[0]['label'].squeeze().long()
+
         data_time.update(time.time() - end)
         
         # input = input.float()
@@ -52,7 +59,7 @@ def train_vanilla(epoch, train_loader, model, criterion, optimizer, opt):
                   'Loss {loss.avg:.4f}\t'
                   'Acc@1 {top1.avg:.3f}\t'
                   'Acc@5 {top5.avg:.3f}'.format(
-                   epoch, idx, len(train_loader), opt.gpu, batch_time=batch_time,
+                   epoch, idx, n_batch, opt.gpu, batch_time=batch_time,
                    data_time=data_time, loss=losses, top1=top1, top5=top5))
             sys.stdout.flush()
             
@@ -84,17 +91,23 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
     top1 = AverageMeter()
     top5 = AverageMeter()
 
+    n_batch = len(train_loader) if opt.dali is None else (train_loader._size + opt.batch_size - 1) // opt.batch_size
+
     end = time.time()
     for idx, data in enumerate(train_loader):
         data_time.update(time.time() - end)
 
-        if opt.distill in ['crd']:
-            input, target, index, contrast_idx = data
+        if opt.dali is None:
+            if opt.distill in ['crd']:
+                input, target, index, contrast_idx = data
+            else:
+                input, target = data
         else:
-            input, target = data
+            input, target = data[0]['data'], data[0]['label'].squeeze().long()
 
-        if target.shape[0] < opt.batch_size:
-            continue
+        # TODO: how to deal with the last batch
+        # if target.shape[0] < opt.batch_size:
+        #     continue
 
         if opt.gpu is not None:
             input = input.cuda(opt.gpu, non_blocking=True)
@@ -103,7 +116,7 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
             if opt.distill in ['crd']:
                 index = index.cuda()
                 contrast_idx = contrast_idx.cuda()
-    
+
         # ===================forward=====================
         feat_s, logit_s = model_s(input, is_feat=True)
         with torch.no_grad():
@@ -167,7 +180,7 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
 
         loss = opt.gamma * loss_cls + opt.alpha * loss_div + opt.beta * loss_kd
         losses.update(loss.item(), input.size(0))
-        
+
         metrics = accuracy(logit_s, target, topk=(1, 5))
         top1.update(metrics[0].item(), input.size(0))
         top5.update(metrics[1].item(), input.size(0))
@@ -177,7 +190,7 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
         # ===================backward=====================
         optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        optimizer.step()        
 
         # print info
         if idx % opt.print_freq == 0:
@@ -188,14 +201,14 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
                   'Loss {loss.avg:.4f}\t'
                   'Acc@1 {top1.avg:.3f}\t'
                   'Acc@5 {top5.avg:.3f}'.format(
-                epoch, idx, len(train_loader), opt.gpu, loss=losses, top1=top1, top5=top5,
+                epoch, idx, n_batch, opt.gpu, loss=losses, top1=top1, top5=top5,
                 batch_time=batch_time, data_time=data_time))
             sys.stdout.flush()
 
     return top1.avg, top5.avg, losses.avg, data_time.avg
 
 
-def validate(val_loader, model, criterion, opt, meter_queue = None):
+def validate(val_loader, model, criterion, opt):
     """validation"""
     
     batch_time = AverageMeter()
@@ -206,9 +219,16 @@ def validate(val_loader, model, criterion, opt, meter_queue = None):
     # switch to evaluate mode
     model.eval()
 
+    n_batch = len(val_loader) if opt.dali is None else (val_loader._size + opt.batch_size - 1) // opt.batch_size
+
     with torch.no_grad():
         end = time.time()
-        for idx, (input, target) in enumerate(val_loader):
+        for idx, batch_data in enumerate(val_loader):
+            if opt.dali is None:
+                input, target = batch_data
+            else:
+                input, target = batch_data[0]['data'], batch_data[0]['label'].squeeze().long()
+
             if opt.gpu is not None:
                 input = input.cuda(opt.gpu, non_blocking=True)
             if torch.cuda.is_available():
@@ -235,24 +255,7 @@ def validate(val_loader, model, criterion, opt, meter_queue = None):
                       'Loss {loss.avg:.4f}\t'
                       'Acc@1 {top1.avg:.3f}\t'
                       'Acc@5 {top5.avg:.3f}'.format(
-                       idx, len(val_loader), opt.gpu, batch_time=batch_time, loss=losses,
+                       idx, n_batch, opt.gpu, batch_time=batch_time, loss=losses,
                        top1=top1, top5=top5))
-
-        if opt.multiprocessing_distributed:
-            if opt.rank % opt.ngpus_per_node == 0:
-                for i in range(opt.ngpus_per_node - 1):
-                    start_time = time.time()
-                    # In fact the other three is not used here.
-                    top1_peer, top5_peer, batch_time_peer, losses_peer = meter_queue.get()
-                    top1.merge(top1_peer)
-                    top5.merge(top5_peer)
-                    losses.merge(losses_peer)
-                    meter_queue.task_done()
-            else:
-                meter_queue.put((top1, top5, batch_time, losses))
-                # TODO: This cost about 2 seconds idle on each processor.
-                #       Without this may cause problem if
-                #       next round putting begins before ending of this round.
-                meter_queue.join()
-
+                
     return top1.avg, top5.avg, losses.avg

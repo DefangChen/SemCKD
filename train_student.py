@@ -16,13 +16,16 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import tensorboard_logger as tb_logger
 
+import apex
+
 from models import model_dict
 from models.util import Embed, ConvReg, LinearEmbed, SelfA
 
 from dataset.cifar100 import get_cifar100_dataloaders, get_cifar100_dataloaders_sample
 from dataset.imagenet import get_imagenet_dataloader, get_dataloader_sample
+from dataset.imagenet_dali import get_dali_data_loader
 
-from helper.util import adjust_learning_rate, save_dict_to_json
+from helper.util import adjust_learning_rate, save_dict_to_json, reduce_tensor
 
 from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss, AAKDLoss, IRGLoss
 from crd.criterion import CRDLoss
@@ -89,6 +92,8 @@ def parse_option():
     
     parser.add_argument('--use-lmdb', action='store_true') # default=false
 
+    parser.add_argument('--dali', type=str, choices=['cpu', 'gpu'], default=None)
+
     parser.add_argument('--multiprocessing-distributed', action='store_true',
                     help='Use multi-processing distributed training to launch '
                          'N processes per node, which has N GPUs. This is the '
@@ -116,6 +121,9 @@ def parse_option():
 
     opt.model_name = 'S:{}_T:{}_{}_{}_r:{}_a:{}_b:{}_{}'.format(opt.model_s, opt.model_t, opt.dataset, opt.distill,
                                                                 opt.gamma, opt.alpha, opt.beta, opt.trial)
+
+    if opt.dali is not None:
+        opt.model_name += '_dali:' + opt.dali
 
     opt.tb_folder = os.path.join(opt.tb_path, opt.model_name)
     if not os.path.isdir(opt.tb_folder):
@@ -164,19 +172,17 @@ def main():
     ngpus_per_node = torch.cuda.device_count()
     opt.ngpus_per_node = ngpus_per_node
     if opt.multiprocessing_distributed:
-        ctx = mp.get_context('spawn')
-        meter_queue = ctx.JoinableQueue()
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
         world_size = 1
         opt.world_size = ngpus_per_node * world_size
         # Use torch.multiprocessing.spawn to launch distributed processes: the
         # main_worker process function
-        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, opt, meter_queue))
+        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, opt))
     else:
         main_worker(None if ngpus_per_node > 1 else opt.gpu_id, ngpus_per_node, opt)
 
-def main_worker(gpu, ngpus_per_node, opt, meter_queue = None):
+def main_worker(gpu, ngpus_per_node, opt):
     global best_acc, total_time
     opt.gpu = gpu
     opt.gpu_id = gpu
@@ -297,7 +303,8 @@ def main_worker(gpu, ngpus_per_node, opt, meter_queue = None):
                 module_list.cuda(opt.gpu)
                 distributed_modules = []
                 for module in module_list:
-                    distributed_modules.append(torch.nn.parallel.DistributedDataParallel(module, device_ids=[opt.gpu]))
+                    DDP = torch.nn.parallel.DistributedDataParallel if opt.dali is None else apex.parallel.DistributedDataParallel
+                    distributed_modules.append(DDP(module, delay_allreduce=True))
                 module_list = distributed_modules
                 criterion_list.cuda(opt.gpu)
             else:
@@ -318,25 +325,36 @@ def main_worker(gpu, ngpus_per_node, opt, meter_queue = None):
             train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size,
                                                                         num_workers=opt.num_workers)
     elif opt.dataset == 'imagenet':
-        if opt.distill in ['crd']:
-            train_loader, val_loader, n_data = get_dataloader_sample(batch_size=opt.batch_size, num_workers=opt.num_workers,
-                                                                    k=opt.nce_k, is_sample=False)
-        else:
-            train_loader, val_loader, train_sampler = get_imagenet_dataloader(batch_size=opt.batch_size,
+        if opt.dali is None:
+            if opt.distill in ['crd']:
+                train_loader, val_loader, n_data = get_dataloader_sample(batch_size=opt.batch_size, num_workers=opt.num_workers,
+                                                                        k=opt.nce_k, is_sample=False)
+            else:
+                train_loader, val_loader, train_sampler = get_imagenet_dataloader(batch_size=opt.batch_size,
                                                                         num_workers=opt.num_workers,
                                                                         multiprocessing_distributed=opt.multiprocessing_distributed)
+        else:
+            train_loader, val_loader = get_dali_data_loader(opt)
     else:
         raise NotImplementedError(opt.dataset)
 
+    if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
+        logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
+
     # validate teacher accuracy
-    teacher_acc, _, _ = validate(val_loader, model_t, criterion_cls, opt, meter_queue)
+    teacher_acc, _, _ = validate(val_loader, model_t, criterion_cls, opt)
+    teacher_acc = torch.tensor([teacher_acc]).cuda(opt.gpu, non_blocking=True)
+    reduced = reduce_tensor(teacher_acc, opt.world_size)
+    teacher_acc = reduced.item()
+
     if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
         print('teacher accuracy: ', teacher_acc)
     
     # routine
     for epoch in range(1, opt.epochs + 1):
         if opt.multiprocessing_distributed:
-            train_sampler.set_epoch(epoch)
+            if opt.dali is None:
+                train_sampler.set_epoch(epoch)
 
         adjust_learning_rate(epoch, opt, optimizer)
         print("==> training...")
@@ -344,13 +362,26 @@ def main_worker(gpu, ngpus_per_node, opt, meter_queue = None):
         time1 = time.time()
         train_acc, train_acc_top5, train_loss, data_time = train(epoch, train_loader, module_list, criterion_list, optimizer, opt)
         time2 = time.time()
-        print(' * Epoch {}, GPU {}, Acc@1 {:.3f}, Acc@5 {:.3f}, Time {:.2f}, Data {:.2f}'.format(epoch, opt.gpu, train_acc, train_acc_top5, time2 - time1, data_time))
-        
-        # TODO: Is this logger multiprocess safe?
-        logger.log_value('train_acc', train_acc, epoch)
-        logger.log_value('train_loss', train_loss, epoch)
 
-        test_acc, test_acc_top5, test_loss = validate(val_loader, model_s, criterion_cls, opt, meter_queue)
+        metrics = torch.tensor([train_acc, train_acc_top5, train_loss, data_time]).cuda(opt.gpu, non_blocking=True)
+        reduced = reduce_tensor(metrics, opt.world_size)
+        train_acc, train_acc_top5, train_loss, data_time = reduced.tolist()
+
+        if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
+            print(' * Epoch {}, GPU {}, Acc@1 {:.3f}, Acc@5 {:.3f}, Time {:.2f}, Data {:.2f}'.format(epoch, opt.gpu, train_acc, train_acc_top5, time2 - time1, data_time))
+            
+            logger.log_value('train_acc', train_acc, epoch)
+            logger.log_value('train_loss', train_loss, epoch)
+
+        test_acc, test_acc_top5, test_loss = validate(val_loader, model_s, criterion_cls, opt)
+
+        if opt.dali is not None:
+            train_loader.reset()
+            val_loader.reset()
+
+        metrics = torch.tensor([test_acc, test_acc_top5, test_loss]).cuda(opt.gpu, non_blocking=True)
+        reduced = reduce_tensor(metrics, opt.world_size)
+        test_acc, test_acc_top5, test_loss = reduced.tolist()
 
         if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
             print(' ** Acc@1 {:.3f}, Acc@5 {:.3f}'.format(test_acc, test_acc_top5))
