@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import tensorboard_logger as tb_logger
 
-import apex
+# import apex
 
 from models import model_dict
 from models.util import Embed, ConvReg, LinearEmbed, SelfA
@@ -303,8 +303,11 @@ def main_worker(gpu, ngpus_per_node, opt):
                 module_list.cuda(opt.gpu)
                 distributed_modules = []
                 for module in module_list:
-                    DDP = torch.nn.parallel.DistributedDataParallel if opt.dali is None else apex.parallel.DistributedDataParallel
-                    distributed_modules.append(DDP(module, delay_allreduce=True))
+                    # TODO: test whether apex is faster
+                    # DDP = torch.nn.parallel.DistributedDataParallel if opt.dali is None else apex.parallel.DistributedDataParallel
+                    # distributed_modules.append(DDP(module, delay_allreduce=True))
+                    DDP = torch.nn.parallel.DistributedDataParallel
+                    distributed_modules.append(DDP(module, device_ids=[opt.gpu]))
                 module_list = distributed_modules
                 criterion_list.cuda(opt.gpu)
             else:

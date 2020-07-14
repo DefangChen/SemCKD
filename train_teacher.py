@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import tensorboard_logger as tb_logger
 
-import apex
+# import apex
 
 from models import model_dict
 
@@ -162,8 +162,10 @@ def main_worker(gpu, ngpus_per_node, opt):
                 # ourselves based on the total number of GPUs we have
                 opt.batch_size = int(opt.batch_size / ngpus_per_node)
                 opt.num_workers = int((opt.num_workers + ngpus_per_node - 1) / ngpus_per_node)
-                DDP = torch.nn.parallel.DistributedDataParallel if opt.dali is None else apex.parallel.DistributedDataParallel
-                model = DDP(model, delay_allreduce=True)
+                # DDP = torch.nn.parallel.DistributedDataParallel if opt.dali is None else apex.parallel.DistributedDataParallel
+                # model = DDP(model, delay_allreduce=True)
+                DDP = torch.nn.parallel.DistributedDataParallel
+                model = DDP(model, device_ids=[opt.gpu])
             else:
                 print('multiprocessing_distributed must be with a specifiec gpu id')
         else:
