@@ -17,7 +17,7 @@ import tensorboard_logger as tb_logger
 from models import model_dict
 
 from dataset.cifar100 import get_cifar100_dataloaders
-from dataset.imagenet import get_imagenet_dataloader
+from dataset.imagenet import get_imagenet_dataloader, imagenet_list
 from helper.util import adjust_learning_rate, accuracy, AverageMeter, save_dict_to_json, reduce_tensor
 from helper.loops import train_vanilla as train, validate
 from dataset.imagenet_dali import get_dali_data_loader
@@ -47,9 +47,9 @@ def parse_option():
                                  'resnet8x4', 'resnet32x4', 'wrn_16_1', 'wrn_16_2', 'wrn_40_1', 'wrn_40_2',
                                  'vgg8', 'vgg11', 'vgg13', 'vgg16', 'vgg19',
                                  'MobileNetV2', 'ShuffleV1', 'ShuffleV2','ResNet50' ])
-    parser.add_argument('--dataset', type=str, default='cifar100', choices=['cifar100', 'imagenet'], help='dataset')
+    parser.add_argument('--dataset', type=str, default='cifar100', choices=['cifar100', 'imagenet', 'imagenette'], help='dataset')
 
-    parser.add_argument('-t', '--trial', type=int, default=0, help='the experiment id')
+    parser.add_argument('-t', '--trial', type=str, default='0', help='the experiment id')
 
     parser.add_argument('--use-lmdb', action='store_true') # default=false
 
@@ -132,13 +132,12 @@ def main_worker(gpu, ngpus_per_node, opt):
                                 world_size=opt.world_size, rank=opt.rank)
 
     # model
-    if opt.dataset == 'cifar100':
-        n_cls = 100
-    elif opt.dataset == 'imagenet':
-        n_cls = 1000
-    else:
-        n_cls = None
-
+    n_cls = {
+        'cifar100': 100,
+        'imagenet': 1000,
+        'imagenette': 10,
+    }.get(opt.dataset, None)
+    
     model = model_dict[opt.model](num_classes=n_cls)
 
     # optimizer
@@ -181,9 +180,10 @@ def main_worker(gpu, ngpus_per_node, opt):
     # dataloader
     if opt.dataset == 'cifar100':
         train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size, num_workers=opt.num_workers)
-    elif opt.dataset == 'imagenet':
+    elif opt.dataset in imagenet_list:
         if opt.dali is None:
             train_loader, val_loader, train_sampler = get_imagenet_dataloader(
+                        dataset = opt.dataset,
                         batch_size=opt.batch_size, num_workers=opt.num_workers, use_lmdb=opt.use_lmdb,
                         multiprocessing_distributed=opt.multiprocessing_distributed)
         else:
@@ -241,7 +241,7 @@ def main_worker(gpu, ngpus_per_node, opt):
                 best_acc = test_acc
                 state = {
                     'epoch': epoch,
-                    'model': model.state_dict(),
+                    'model': model.module.state_dict() if opt.multiprocessing_distributed else model.state_dict(),
                     'best_acc': best_acc,
                     'optimizer': optimizer.state_dict(),
                 }

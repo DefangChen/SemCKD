@@ -109,7 +109,7 @@ def get_dali_data_loader(args):
     crop_size = 224
     val_size = 256
 
-    data_folder = get_data_folder()
+    data_folder = get_data_folder(args.dataset)
     train_folder = os.path.join(data_folder, 'train')
     val_folder = os.path.join(data_folder, 'val')
 

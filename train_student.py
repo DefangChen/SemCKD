@@ -22,7 +22,7 @@ from models import model_dict
 from models.util import Embed, ConvReg, LinearEmbed, SelfA
 
 from dataset.cifar100 import get_cifar100_dataloaders, get_cifar100_dataloaders_sample
-from dataset.imagenet import get_imagenet_dataloader, get_dataloader_sample
+from dataset.imagenet import get_imagenet_dataloader, get_dataloader_sample, imagenet_list
 from dataset.imagenet_dali import get_dali_data_loader
 
 from helper.util import adjust_learning_rate, save_dict_to_json, reduce_tensor
@@ -51,7 +51,7 @@ def parse_option():
     parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 
     # dataset
-    parser.add_argument('--dataset', type=str, default='cifar100', choices=['cifar100', 'imagenet'], help='dataset')
+    parser.add_argument('--dataset', type=str, default='cifar100', choices=['cifar100', 'imagenet', 'imagenette'], help='dataset')
 
     # model
     parser.add_argument('--model_s', type=str, default='resnet8',
@@ -144,7 +144,7 @@ def get_teacher_name(model_path):
         return segments[0] + '_' + segments[1] + '_' + segments[2]
 
 
-def load_teacher(model_path, n_cls):
+def load_teacher(model_path, n_cls, gpu=None):
     print('==> loading teacher model')
     model_t = get_teacher_name(model_path)
     model = model_dict[model_t](num_classes=n_cls)
@@ -155,7 +155,9 @@ def load_teacher(model_path, n_cls):
         #model = model.module
     # pre-trained model saved from train_teacher.py    
     #else:
-    model.load_state_dict(torch.load(model_path)['model'])
+    # TODO: reduce size of the teacher saved in train_teacher.py
+    map_location = None if gpu is None else {'cuda:0': 'cuda:%d' % gpu}
+    model.load_state_dict(torch.load(model_path, map_location=map_location)['model'])
     print('==> done')
     return model
 
@@ -199,18 +201,17 @@ def main_worker(gpu, ngpus_per_node, opt):
         opt.batch_size = int(opt.batch_size / ngpus_per_node)
         opt.num_workers = int((opt.num_workers + ngpus_per_node - 1) / ngpus_per_node)
 
-    # tensorboard logger
-    logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
-
-    if opt.dataset == 'cifar100':
-        n_cls = 100
-    elif opt.dataset == 'imagenet':
-        n_cls = 1000
-    else:
+    class_num_map = {
+        'cifar100': 100,
+        'imagenet': 1000,
+        'imagenette': 10,
+    }
+    if opt.dataset not in class_num_map:
         raise NotImplementedError(opt.dataset)
+    n_cls = class_num_map[opt.dataset]
 
     # model
-    model_t = load_teacher(opt.path_t, n_cls)
+    model_t = load_teacher(opt.path_t, n_cls, opt.gpu)
     model_s = model_dict[opt.model_s](num_classes=n_cls)
 
     data = torch.randn(2, 3, 32, 32)
@@ -303,7 +304,7 @@ def main_worker(gpu, ngpus_per_node, opt):
                 module_list.cuda(opt.gpu)
                 distributed_modules = []
                 for module in module_list:
-                    # TODO: test whether apex is faster
+                    # TODO: test apex.amp
                     # DDP = torch.nn.parallel.DistributedDataParallel if opt.dali is None else apex.parallel.DistributedDataParallel
                     # distributed_modules.append(DDP(module, delay_allreduce=True))
                     DDP = torch.nn.parallel.DistributedDataParallel
@@ -327,13 +328,13 @@ def main_worker(gpu, ngpus_per_node, opt):
         else:
             train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size,
                                                                         num_workers=opt.num_workers)
-    elif opt.dataset == 'imagenet':
+    elif opt.dataset in imagenet_list:
         if opt.dali is None:
             if opt.distill in ['crd']:
                 train_loader, val_loader, n_data = get_dataloader_sample(batch_size=opt.batch_size, num_workers=opt.num_workers,
                                                                         k=opt.nce_k, is_sample=False)
             else:
-                train_loader, val_loader, train_sampler = get_imagenet_dataloader(batch_size=opt.batch_size,
+                train_loader, val_loader, train_sampler = get_imagenet_dataloader(dataset=opt.dataset, batch_size=opt.batch_size,
                                                                         num_workers=opt.num_workers,
                                                                         multiprocessing_distributed=opt.multiprocessing_distributed)
         else:
@@ -349,6 +350,9 @@ def main_worker(gpu, ngpus_per_node, opt):
     teacher_acc = torch.tensor([teacher_acc]).cuda(opt.gpu, non_blocking=True)
     reduced = reduce_tensor(teacher_acc, opt.world_size)
     teacher_acc = reduced.item()
+
+    if opt.dali is not None:
+        val_loader.reset()
 
     if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
         print('teacher accuracy: ', teacher_acc)
@@ -369,14 +373,14 @@ def main_worker(gpu, ngpus_per_node, opt):
         metrics = torch.tensor([train_acc, train_acc_top5, train_loss, data_time]).cuda(opt.gpu, non_blocking=True)
         reduced = reduce_tensor(metrics, opt.world_size)
         train_acc, train_acc_top5, train_loss, data_time = reduced.tolist()
-
         if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
             print(' * Epoch {}, GPU {}, Acc@1 {:.3f}, Acc@5 {:.3f}, Time {:.2f}, Data {:.2f}'.format(epoch, opt.gpu, train_acc, train_acc_top5, time2 - time1, data_time))
             
             logger.log_value('train_acc', train_acc, epoch)
             logger.log_value('train_loss', train_loss, epoch)
 
-        test_acc, test_acc_top5, test_loss = validate(val_loader, model_s, criterion_cls, opt)
+        print('GPU %d validating' % (opt.gpu))
+        test_acc, test_acc_top5, test_loss = validate(val_loader, model_s, criterion_cls, opt)        
 
         if opt.dali is not None:
             train_loader.reset()
