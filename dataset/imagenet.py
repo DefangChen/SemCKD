@@ -166,7 +166,8 @@ def get_dataloader_sample(dataset='imagenet', batch_size=128, num_workers=8, is_
                               batch_size=batch_size,
                               shuffle=True,
                               num_workers=num_workers,
-                              pin_memory=True)
+                              pin_memory=True, 
+                              drop_last=True) # TODO: should I drop the last batch?
     test_loader = DataLoader(test_set,
                              batch_size=batch_size,
                              shuffle=False,

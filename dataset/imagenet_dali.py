@@ -30,16 +30,20 @@ except ImportError:
 
 class HybridTrainPipe(Pipeline):
     def __init__(self, batch_size, num_threads, device_id, data_dir, crop,
-                 shard_id, num_shards, dali_cpu=False):
+                 shard_id, num_shards, dali_cpu=False, shuffle=True):
         super(HybridTrainPipe, self).__init__(batch_size,
                                               num_threads,
                                               device_id,
                                               seed=12 + device_id)
+        shuffle_args = {
+            'random_shuffle': False,
+            'shuffle_after_epoch': shuffle,
+        }
         self.input = ops.FileReader(file_root=data_dir,
                                     shard_id=shard_id,
                                     num_shards=num_shards,
-                                    shuffle_after_epoch=True,
-                                    pad_last_batch=True)
+                                    pad_last_batch=True,
+                                    **shuffle_args)
         #let user decide which pipeline works him bets for RN version he runs
         dali_device = 'cpu' if dali_cpu else 'gpu'
         decoder_device = 'cpu' if dali_cpu else 'mixed'
@@ -120,7 +124,8 @@ def get_dali_data_loader(args):
                             crop=crop_size,
                             dali_cpu=args.dali == 'cpu',
                             shard_id=args.rank,
-                            num_shards=args.world_size)
+                            num_shards=args.world_size,
+                            shuffle=(not args.no_shuffle))
     pipe.build()
     train_loader = DALIClassificationIterator(pipe, reader_name="Reader", fill_last_batch=False)
 

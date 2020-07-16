@@ -52,6 +52,8 @@ def parse_option():
 
     # dataset
     parser.add_argument('--dataset', type=str, default='cifar100', choices=['cifar100', 'imagenet', 'imagenette'], help='dataset')
+    parser.add_argument('--no-shuffle', action='store_true')
+    parser.add_argument('--deterministic', action='store_true')
 
     # model
     parser.add_argument('--model_s', type=str, default='resnet8',

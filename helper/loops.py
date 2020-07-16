@@ -4,7 +4,7 @@ import sys
 import time
 import torch
 
-from .util import AverageMeter, accuracy, reduce_tensor
+from .util import AverageMeter, accuracy, reduce_tensor, gather_list
 
 def train_vanilla(epoch, train_loader, model, criterion, optimizer, opt):
     """vanilla training"""
@@ -108,6 +108,7 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
         # TODO: how to deal with the last batch
         # if target.shape[0] < opt.batch_size:
         #     continue
+        # print('GPU %d shape' %opt.gpu, input.shape, target.shape)
 
         if opt.gpu is not None:
             input = input.cuda(opt.gpu, non_blocking=True)
@@ -122,6 +123,9 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
         with torch.no_grad():
             feat_t, logit_t = model_t(input, is_feat=True)
             feat_t = [f.detach() for f in feat_t]
+
+        # feat_s_batch = gather_list(feat_s, opt.world_size, opt.rank)
+        # feat_t_batch = gather_list(feat_t, opt.world_size, opt.rank)
 
         # cls + kl div
         loss_cls = criterion_cls(logit_s, target)

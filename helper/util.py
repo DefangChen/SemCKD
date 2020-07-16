@@ -92,6 +92,17 @@ def reduce_tensor(tensor, world_size = 1):
     rt /= world_size
     return rt
 
+def gather_list(tensor_list, world_size = 1, rank = 0):
+    gathered_list = []
+    for tensor in tensor_list:
+        print('GPU %d shape ' % rank, tensor.shape)
+        gathered = [torch.zeros_like(tensor) for i in range(world_size)]
+        dist.all_gather(gathered, tensor) # TODO: async
+        gathered_tensor = torch.cat(gathered)
+        gathered_list.append(gathered_tensor)
+    print('GPU %d Gathered' % rank)
+    return gathered_list
+
 if __name__ == '__main__':
 
     pass
