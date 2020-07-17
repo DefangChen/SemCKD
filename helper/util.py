@@ -41,13 +41,6 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-    def merge(self, peer):
-        self.val = peer.val
-        self.sum += peer.sum
-        self.count += peer.count
-        self.avg = self.sum / self.count
-
-
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.no_grad():
@@ -86,10 +79,11 @@ def load_json_to_dict(json_path):
         params = json.load(f)
     return params
 
-def reduce_tensor(tensor, world_size = 1):
+def reduce_tensor(tensor, world_size = 1, op='avg'):
     rt = tensor.clone()
     dist.all_reduce(rt, op=dist.ReduceOp.SUM)
-    rt /= world_size
+    if world_size > 1:
+        rt = torch.true_divide(rt, world_size)
     return rt
 
 if __name__ == '__main__':

@@ -225,10 +225,6 @@ def main_worker(gpu, ngpus_per_node, opt):
             train_loader.reset()
             val_loader.reset()
 
-        metrics = torch.tensor([test_acc, test_acc_top5, test_loss]).cuda(opt.gpu, non_blocking=True)
-        reduced = reduce_tensor(metrics, opt.world_size)
-        test_acc, test_acc_top5, test_loss = reduced.tolist()
-
         if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
             print(' ** Acc@1 {:.3f}, Acc@5 {:.3f}'.format(test_acc, test_acc_top5))
             

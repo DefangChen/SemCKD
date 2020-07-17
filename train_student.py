@@ -347,9 +347,6 @@ def main_worker(gpu, ngpus_per_node, opt):
 
     # validate teacher accuracy
     teacher_acc, _, _ = validate(val_loader, model_t, criterion_cls, opt)
-    teacher_acc = torch.tensor([teacher_acc]).cuda(opt.gpu, non_blocking=True)
-    reduced = reduce_tensor(teacher_acc, opt.world_size)
-    teacher_acc = reduced.item()
 
     if opt.dali is not None:
         val_loader.reset()
@@ -385,10 +382,6 @@ def main_worker(gpu, ngpus_per_node, opt):
         if opt.dali is not None:
             train_loader.reset()
             val_loader.reset()
-
-        metrics = torch.tensor([test_acc, test_acc_top5, test_loss]).cuda(opt.gpu, non_blocking=True)
-        reduced = reduce_tensor(metrics, opt.world_size)
-        test_acc, test_acc_top5, test_loss = reduced.tolist()
 
         if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
             print(' ** Acc@1 {:.3f}, Acc@5 {:.3f}'.format(test_acc, test_acc_top5))

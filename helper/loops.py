@@ -105,10 +105,6 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
         else:
             input, target = data[0]['data'], data[0]['label'].squeeze().long()
 
-        # TODO: how to deal with the last batch
-        # if target.shape[0] < opt.batch_size:
-        #     continue
-
         if opt.gpu is not None:
             input = input.cuda(opt.gpu, non_blocking=True)
         if torch.cuda.is_available():
@@ -257,5 +253,16 @@ def validate(val_loader, model, criterion, opt):
                       'Acc@5 {top5.avg:.3f}'.format(
                        idx, n_batch, opt.gpu, batch_time=batch_time, loss=losses,
                        top1=top1, top5=top5))
-                
+    
+    if opt.multiprocessing_distributed:
+        # Batch size may not be equal across multiple gpus
+        total_metrics = torch.tensor([top1.sum, top5.sum, losses.sum]).to(opt.gpu)
+        count_metrics = torch.tensor([top1.count, top5.count, losses.count]).to(opt.gpu)
+        total_metrics = reduce_tensor(total_metrics, 1) # here world_size=1, because they should be summed up
+        count_metrics = reduce_tensor(count_metrics, 1)
+        ret = []
+        for s, n in zip(total_metrics.tolist(), count_metrics.tolist()):
+            ret.append(s / (1.0 * n))
+        return ret
+
     return top1.avg, top5.avg, losses.avg

@@ -122,7 +122,7 @@ def get_dali_data_loader(args):
                             shard_id=args.rank,
                             num_shards=args.world_size)
     pipe.build()
-    train_loader = DALIClassificationIterator(pipe, reader_name="Reader", fill_last_batch=False)
+    train_loader = DALIClassificationIterator(pipe, reader_name="Reader", fill_last_batch=True, last_batch_padded=False)
 
     pipe = HybridValPipe(batch_size=args.batch_size,
                             num_threads=args.num_workers,
@@ -133,6 +133,6 @@ def get_dali_data_loader(args):
                             shard_id=args.rank,
                             num_shards=args.world_size)
     pipe.build()
-    val_loader = DALIClassificationIterator(pipe, reader_name="Reader", fill_last_batch=False)
+    val_loader = DALIClassificationIterator(pipe, reader_name="Reader", fill_last_batch=False, last_batch_padded=False)
 
     return train_loader, val_loader
