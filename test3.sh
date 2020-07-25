@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=2,3 python example.py -a resnet34 --dist-url 'tcp://127.0.0.1:23453' --dist-backend 'nccl' --multiprocessing-distributed --world-size 1 --rank 0 data/imagenet --epochs 1 --print-freq 200 --worker 16

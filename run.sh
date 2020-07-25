@@ -1,0 +1,1 @@
+python train_teacher.py --model ResNet34 --batch_size 256 --epochs 90 --learning_rate 0.1 --lr_decay_epochs 30,60 --weight_decay 1e-4 --dataset imagenet --num_workers 16 --gpu_id 4,5,6,7 --multiprocessing-distributed --dist-url tcp://127.0.0.1:23451 --print-freq 100

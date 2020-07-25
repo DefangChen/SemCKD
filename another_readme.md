@@ -1,0 +1,1 @@
+因为 DistributedSampler 的问题，不开 DALI 的话 validate 有小问题，见[这篇笔记](https://github.com/triomino/study/blob/master/pytorch/code_notes.md)。

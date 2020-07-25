@@ -1,0 +1,1 @@
+python train_student.py --path_t ./save/models/ResNet34_vanilla/resnet34_transformed.pth --batch_size $1 --epochs 10 --dataset imagenet --gpu_id 4 --print_freq 100 --num_workers $2 --distill kd --model_s ResNet18 -r 1 -a 0 -b 0 --trial 0 --learning_rate 0.01 --lr_decay_epochs 30,60 --weight_decay 1e-4
