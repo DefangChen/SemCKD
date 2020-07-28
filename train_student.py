@@ -59,7 +59,7 @@ def parse_option():
                         choices=['resnet8', 'resnet14', 'resnet20', 'resnet32', 'resnet44', 'resnet56', 'resnet110', 'ResNet18', 'ResNet34', 
                                  'resnet8x4', 'resnet32x4', 'wrn_16_1', 'wrn_16_2', 'wrn_40_1', 'wrn_40_2', 'wrn_50_2',
                                  'vgg8', 'vgg11', 'vgg13', 'vgg16', 'vgg19', 'ResNet50',
-                                 'MobileNetV2', 'ShuffleV1', 'ShuffleV2', 'MobileNetV2_Imagenet'])
+                                 'MobileNetV2', 'ShuffleV1', 'ShuffleV2', 'ShuffleV2_Imagenet', 'MobileNetV2_Imagenet'])
     parser.add_argument('--path-t', type=str, default=None, help='teacher model snapshot')
 
     # distillation
@@ -105,6 +105,8 @@ def parse_option():
     
     parser.add_argument('--deterministic', action='store_true', help='Make results reproducible')
 
+    parser.add_argument('--skip-validation', action='store_true', help='Skip validation of teacher')
+
     opt = parser.parse_args()
 
     # set different learning rate from these 4 models
@@ -141,10 +143,13 @@ def parse_option():
 def get_teacher_name(model_path):
     """parse teacher name"""
     segments = model_path.split('/')[-2].split('_')
-    if segments[0] != 'wrn':
-        return segments[0]
-    else:
+    if segments[0] == 'wrn':
         return segments[0] + '_' + segments[1] + '_' + segments[2]
+    if segments[0] == 'resnext50':
+        return segments[0] + '_' + segments[1]
+    if segments[0] == 'vgg13' and segments[1] == 'imagenet':
+        return segments[0] + '_' + segments[1]
+    return segments[0]
 
 
 def load_teacher(model_path, n_cls, gpu=None):
@@ -221,7 +226,8 @@ def main_worker(gpu, ngpus_per_node, opt):
 
     # model
     model_t = load_teacher(opt.path_t, n_cls, opt.gpu)
-    model_s = model_dict[opt.model_s](num_classes=n_cls)
+    module_args = {'num_classes': n_cls}
+    model_s = model_dict[opt.model_s](**module_args)
 
     data = torch.randn(2, 3, 32, 32)
     model_t.eval()
@@ -355,14 +361,17 @@ def main_worker(gpu, ngpus_per_node, opt):
     if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
         logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
 
-    # validate teacher accuracy
-    teacher_acc, _, _ = validate(val_loader, model_t, criterion_cls, opt)
+    if not opt.skip_validation:
+        # validate teacher accuracy
+        teacher_acc, _, _ = validate(val_loader, model_t, criterion_cls, opt)
 
-    if opt.dali is not None:
-        val_loader.reset()
+        if opt.dali is not None:
+            val_loader.reset()
 
-    if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
-        print('teacher accuracy: ', teacher_acc)
+        if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
+            print('teacher accuracy: ', teacher_acc)
+    else:
+        print('Skipping teacher validation.')
     
     # routine
     for epoch in range(1, opt.epochs + 1):
