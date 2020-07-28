@@ -8,6 +8,7 @@ import os
 import argparse
 import time
 
+import numpy
 import torch
 import torch.optim as optim
 import torch.multiprocessing as mp
@@ -101,6 +102,8 @@ def parse_option():
                          'multi node data parallel training')
     parser.add_argument('--dist-url', default='tcp://127.0.0.1:23451', type=str,
                     help='url used to set up distributed training')
+    
+    parser.add_argument('--deterministic', action='store_true', help='Make results reproducible')
 
     opt = parser.parse_args()
 
@@ -200,6 +203,12 @@ def main_worker(gpu, ngpus_per_node, opt):
                                 world_size=opt.world_size, rank=opt.rank)
         opt.batch_size = int(opt.batch_size / ngpus_per_node)
         opt.num_workers = int((opt.num_workers + ngpus_per_node - 1) / ngpus_per_node)
+
+    if opt.deterministic:
+        torch.manual_seed(12345)
+        cudnn.deterministic = True
+        cudnn.benchmark = False
+        numpy.random.seed(12345)
 
     class_num_map = {
         'cifar100': 100,
@@ -316,7 +325,8 @@ def main_worker(gpu, ngpus_per_node, opt):
         else:
             criterion_list.cuda()
             module_list.cuda()
-        cudnn.benchmark = True
+        if not opt.deterministic:
+            cudnn.benchmark = True
 
     # dataloader
     if opt.dataset == 'cifar100':
