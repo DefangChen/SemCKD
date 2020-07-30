@@ -51,6 +51,7 @@ python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transfo
 ![GPU截图](fitnet8_GPU.png) -->
 
 上面的实验 validate 都有问题，但是误差极小，不过还是统统注释掉。下面开始时修复的 validate。
+# ResNet34 -> ResNet18
 ## irg8.sh
 ```
 python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transformed.pth \
@@ -83,4 +84,10 @@ python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transfo
 ![release_kd](release_kd_GPU.png)
 
 ## validation
-single GPU 73.314
+73.314 DALI-> 73.262
+
+# VGG13 -> ShuffleNetV2
+这个一开始爆显存了，所以 DALI 都用了 cpu 来减少显存用量。
+## aakd
+7.30 早上十点多开始，开始的 GPU 用量：
+![vgg_shuffle_aakd_GPU](vgg_shuffle_aakd_GPU.png)
