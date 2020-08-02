@@ -13,7 +13,9 @@ from torchvision import transforms
 from dataset.folder2lmdb import ImageFolderLMDB
 
 imagenet_list = ['imagenet', 'imagenette']
-def get_data_folder(dataset = 'imagenet'):
+
+
+def get_data_folder(dataset='imagenet'):
     """
     return the path to store the data
     """
@@ -179,7 +181,8 @@ def get_dataloader_sample(dataset='imagenet', batch_size=128, num_workers=8, is_
     return train_loader, test_loader, len(train_set), len(train_set.classes)
 
 
-def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, use_lmdb=False, multiprocessing_distributed=False):
+def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, use_lmdb=False,
+                            multiprocessing_distributed=False):
     """
     Data Loader for imagenet
     """

@@ -20,23 +20,22 @@ class ConvReg(nn.Module):
             self.conv = nn.ConvTranspose2d(s_C, t_C, kernel_size=4, stride=2, padding=1)
         elif s_H >= t_H:
             self.conv = nn.Conv2d(s_C, t_C, kernel_size=(1+s_H-t_H, 1+s_W-t_W))
-        else: 
+        else:
             self.conv = nn.Conv2d(s_C, t_C, kernel_size=3, padding=1, stride=1)
         self.bn = nn.BatchNorm2d(t_C)
         self.relu = nn.ReLU(inplace=True)
-        
+
     def forward(self, x, t):
-        
-        if self.s_H == 2 * self.t_H or self.s_H *2 == self.t_H or self.s_H >= self.t_H:
+        if self.s_H == 2 * self.t_H or self.s_H * 2 == self.t_H or self.s_H >= self.t_H:
             x = self.conv(x)
             if self.use_relu:
-                return self.relu(self.bn(x))
+                return self.relu(self.bn(x)), t
             else:
                 return self.bn(x), t
         else:
             x = self.conv(x)
             if self.use_relu:
-                return self.relu(self.bn(x))
+                return self.relu(self.bn(x)), F.adaptive_avg_pool2d(t, (self.s_H, self.s_H))
             else:
                 return self.bn(x), F.adaptive_avg_pool2d(t, (self.s_H, self.s_H))
 

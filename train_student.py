@@ -5,6 +5,7 @@ the general training framework
 from __future__ import print_function
 
 import os
+import re
 import argparse
 import time
 
@@ -32,6 +33,9 @@ from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlatio
 from crd.criterion import CRDLoss
 
 from helper.loops import train_distill as train, validate
+
+split_symbol = '~' if os.name == 'nt' else ':'
+
 
 def parse_option():
 
@@ -142,7 +146,12 @@ def parse_option():
 
 def get_teacher_name(model_path):
     """parse teacher name"""
-    segments = model_path.split('/')[-2].split('_')
+    directory = model_path.split('/')[-2]
+    pattern = ''.join(['S', split_symbol, '(.+)', '_T', split_symbol])
+    name_match = re.match(pattern, directory)
+    if name_match:
+        return name_match[1]
+    segments = directory.split('_')
     if segments[0] == 'wrn':
         return segments[0] + '_' + segments[1] + '_' + segments[2]
     if segments[0] == 'resnext50':
@@ -228,8 +237,12 @@ def main_worker(gpu, ngpus_per_node, opt):
     model_t = load_teacher(opt.path_t, n_cls, opt.gpu)
     module_args = {'num_classes': n_cls}
     model_s = model_dict[opt.model_s](**module_args)
+    
+    if opt.dataset == 'cifar100':
+        data = torch.randn(2, 3, 32, 32)
+    elif opt.dataset == 'imagenet':
+        data = torch.randn(2, 3, 224, 224)
 
-    data = torch.randn(2, 3, 32, 32)
     model_t.eval()
     model_s.eval()
     feat_t, _ = model_t(data, is_feat=True)
