@@ -12,23 +12,33 @@ class ConvReg(nn.Module):
         self.use_relu = use_relu
         s_N, s_C, s_H, s_W = s_shape
         t_N, t_C, t_H, t_W = t_shape
+        self.s_H = s_H
+        self.t_H = t_H
         if s_H == 2 * t_H:
             self.conv = nn.Conv2d(s_C, t_C, kernel_size=3, stride=2, padding=1)
         elif s_H * 2 == t_H:
             self.conv = nn.ConvTranspose2d(s_C, t_C, kernel_size=4, stride=2, padding=1)
         elif s_H >= t_H:
             self.conv = nn.Conv2d(s_C, t_C, kernel_size=(1+s_H-t_H, 1+s_W-t_W))
-        else:
-            raise NotImplemented('student size {}, teacher size {}'.format(s_H, t_H))
+        else: 
+            self.conv = nn.Conv2d(s_C, t_C, kernel_size=3, padding=1, stride=1)
         self.bn = nn.BatchNorm2d(t_C)
         self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        x = self.conv(x)
-        if self.use_relu:
-            return self.relu(self.bn(x))
+        
+    def forward(self, x, t):
+        
+        if self.s_H == 2 * self.t_H or self.s_H *2 == self.t_H or self.s_H >= self.t_H:
+            x = self.conv(x)
+            if self.use_relu:
+                return self.relu(self.bn(x))
+            else:
+                return self.bn(x), t
         else:
-            return self.bn(x)
+            x = self.conv(x)
+            if self.use_relu:
+                return self.relu(self.bn(x))
+            else:
+                return self.bn(x), F.adaptive_avg_pool2d(t, (self.s_H, self.s_H))
 
 class Regress(nn.Module):
     """Simple Linear Regression for FitNet (feature vector layer)"""
