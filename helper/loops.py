@@ -127,8 +127,7 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
         if opt.distill == 'kd':
             loss_kd = 0
         elif opt.distill == 'hint':
-            f_s = module_list[1](feat_s[opt.hint_layer])
-            f_t = feat_t[opt.hint_layer]
+            f_s, f_t = module_list[1](feat_s[opt.hint_layer], feat_t[opt.hint_layer])
             loss_kd = criterion_kd(f_s, f_t)
         elif opt.distill == 'aakd':
             s_value, f_target, weight = module_list[1](feat_s[1:-1], feat_t[1:-1])
