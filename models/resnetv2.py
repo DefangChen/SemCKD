@@ -15,7 +15,7 @@ except ImportError:
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152', 'resnext50_32x4d', 'resnext101_32x8d',
-           'wide_resnet50_2', 'wide_resnet101_2']
+           'wide_resnet50_2', 'wide_resnet101_2', 'resnet34x4']
 
 
 model_urls = {
@@ -135,7 +135,7 @@ class ResNet(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
                  groups=1, width_per_group=64, replace_stride_with_dilation=None,
-                 norm_layer=None):
+                 norm_layer=None, multiplier=1):
         super(ResNet, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -143,6 +143,7 @@ class ResNet(nn.Module):
 
         self.inplanes = 64
         self.dilation = 1
+        self.multiplier = 1
         if replace_stride_with_dilation is None:
             # each element in the tuple indicates if we should replace
             # the 2x2 stride with a dilated convolution instead
@@ -157,12 +158,12 @@ class ResNet(nn.Module):
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2,
+        self.layer1 = self._make_layer(block, 64 * self.multiplier, layers[0])
+        self.layer2 = self._make_layer(block, 128 * self.multiplier, layers[1], stride=2,
                                        dilate=replace_stride_with_dilation[0])
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
+        self.layer3 = self._make_layer(block, 256 * self.multiplier, layers[2], stride=2,
                                        dilate=replace_stride_with_dilation[1])
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
+        self.layer4 = self._make_layer(block, 512 * self.multiplier, layers[3], stride=2,
                                        dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
@@ -320,6 +321,16 @@ def resnet152(pretrained=False, progress=True, **kwargs):
     return _resnet('resnet152', Bottleneck, [3, 8, 36, 3], pretrained, progress,
                    **kwargs)
 
+
+def resnet34x4(pretrained=False, progress=True, **kwargs):
+    r"""ResNet-34x4 model
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet34x4', BasicBlock, [3, 4, 6, 3], pretrained, progress, multiplier = 4,
+                   **kwargs)
 
 def resnext50_32x4d(pretrained=False, progress=True, **kwargs):
     r"""ResNeXt-50 32x4d model from
