@@ -91,3 +91,9 @@ python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transfo
 ## aakd
 7.30 早上十点多开始，开始的 GPU 用量：
 ![vgg_shuffle_aakd_GPU](vgg_shuffle_aakd_GPU.png)
+
+# 懒得写记录了 直接画表格
+VGG13 -> ShuffleV2
+|aakd(b=100)|aakd(b=400)|hint(re-run required)|irg(b=0.05)|sp|vid|
+|-|-|-|-|-|-|
+|63.228|62.144|63.134|63.82x|

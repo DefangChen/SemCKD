@@ -430,6 +430,8 @@ def main_worker(gpu, ngpus_per_node, opt):
                     'model': model_s.state_dict(),
                     'best_acc': best_acc,
                 }
+                if opt.distill == 'aakd':
+                    state['attention'] = trainable_list[-1].state_dict()
                 save_file = os.path.join(opt.save_folder, '{}_best.pth'.format(opt.model_s))
                 
                 test_merics = {'test_loss': test_loss,

@@ -54,7 +54,7 @@ class Regress(nn.Module):
 
 class SelfA(nn.Module):
     """Cross layer Self Attention"""
-    def __init__(self, s_len, t_len, input_channel, s_n, s_t, factor=2): 
+    def __init__(self, s_len, t_len, input_channel, s_n, s_t, factor=4): 
         super(SelfA, self).__init__()
           
         self.avgpool = nn.AdaptiveAvgPool2d((1,1))
