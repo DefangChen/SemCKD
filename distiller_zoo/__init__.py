@@ -7,4 +7,4 @@ from .RKD import RKDLoss
 from .SP import Similarity
 from .VID import VIDLoss
 from .IRG import IRGLoss
-from .AA import AAKDLoss
+from .SemCKD import SemCKDLoss

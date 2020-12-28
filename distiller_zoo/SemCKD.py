@@ -5,10 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class AAKDLoss(nn.Module):
+class SemCKDLoss(nn.Module):
     # """Similarity-Preserving Knowledge Distillation, ICCV2019, verified by original author"""
     def __init__(self):
-        super(AAKDLoss, self).__init__()
+        super(SemCKDLoss, self).__init__()
         self.crit = nn.MSELoss(reduction='none')
         
     def forward(self, s_value, f_target, weight):

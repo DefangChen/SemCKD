@@ -118,8 +118,8 @@ def main():
 
 def main_worker(gpu, ngpus_per_node, opt):
     global best_acc, total_time
-    opt.gpu = gpu
-    opt.gpu_id = gpu
+    opt.gpu = int(gpu)
+    opt.gpu_id = int(gpu)
 
     if opt.gpu is not None:
         print("Use GPU: {} for training".format(opt.gpu))
@@ -209,9 +209,10 @@ def main_worker(gpu, ngpus_per_node, opt):
         train_acc, train_acc_top5, train_loss = train(epoch, train_loader, model, criterion, optimizer, opt)
         time2 = time.time()
 
-        metrics = torch.tensor([train_acc, train_acc_top5, train_loss]).cuda(opt.gpu, non_blocking=True)
-        reduced = reduce_tensor(metrics, opt.world_size)
-        train_acc, train_acc_top5, train_loss = reduced.tolist()
+        if opt.multiprocessing_distributed:
+            metrics = torch.tensor([train_acc, train_acc_top5, train_loss]).cuda(opt.gpu, non_blocking=True)
+            reduced = reduce_tensor(metrics, opt.world_size if 'world_size' in opt else 1)
+            train_acc, train_acc_top5, train_loss = reduced.tolist()
 
         if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
             print(' * Epoch {}, Acc@1 {:.3f}, Acc@5 {:.3f}, Time {:.2f}'.format(epoch, train_acc, train_acc_top5, time2 - time1))

@@ -29,7 +29,7 @@ from dataset.imagenet_dali import get_dali_data_loader
 
 from helper.util import adjust_learning_rate, save_dict_to_json, reduce_tensor
 
-from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss, AAKDLoss, IRGLoss
+from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss, SemCKDLoss, IRGLoss
 from crd.criterion import CRDLoss
 
 from helper.loops import train_distill as train, validate
@@ -68,7 +68,7 @@ def parse_option():
 
     # distillation
     parser.add_argument('--distill', type=str, default='kd', choices=['kd', 'hint', 'attention', 'similarity', 'vid', 
-                                                                      'correlation', 'rkd', 'pkt', 'crd', 'aakd', 'irg'])
+                                                                      'correlation', 'rkd', 'pkt', 'crd', 'semckd', 'irg'])
     parser.add_argument('--trial', type=str, default='1', help='trial id')
 
     parser.add_argument('-r', '--gamma', type=float, default=1.0, help='weight for classification')
@@ -203,15 +203,15 @@ def main():
 
 def main_worker(gpu, ngpus_per_node, opt):
     global best_acc, total_time
-    opt.gpu = gpu
-    opt.gpu_id = gpu
+    opt.gpu = int(gpu)
+    opt.gpu_id = int(gpu)
 
     if opt.gpu is not None:
         print("Use GPU: {} for training".format(opt.gpu))
 
     if opt.multiprocessing_distributed:
         # Only one node now.
-        opt.rank = int(gpu)
+        opt.rank = gpu
         dist_backend = 'nccl'
         dist.init_process_group(backend=dist_backend, init_method=opt.dist_url,
                                 world_size=opt.world_size, rank=opt.rank)
@@ -262,11 +262,11 @@ def main_worker(gpu, ngpus_per_node, opt):
         regress_s = ConvReg(feat_s[opt.hint_layer].shape, feat_t[opt.hint_layer].shape)
         module_list.append(regress_s)
         trainable_list.append(regress_s)
-    elif opt.distill == 'aakd':
+    elif opt.distill == 'semckd':
         s_n = [f.shape[1] for f in feat_s[1:-1]]
         t_n = [f.shape[1] for f in feat_t[1:-1]]
        
-        criterion_kd = AAKDLoss()
+        criterion_kd = SemCKDLoss()
         self_attention = SelfA(len(feat_s)-2, len(feat_t)-2, opt.batch_size, s_n, t_n)
         module_list.append(self_attention)
         trainable_list.append(self_attention)
@@ -399,9 +399,11 @@ def main_worker(gpu, ngpus_per_node, opt):
         train_acc, train_acc_top5, train_loss, data_time = train(epoch, train_loader, module_list, criterion_list, optimizer, opt)
         time2 = time.time()
 
-        metrics = torch.tensor([train_acc, train_acc_top5, train_loss, data_time]).cuda(opt.gpu, non_blocking=True)
-        reduced = reduce_tensor(metrics, opt.world_size)
-        train_acc, train_acc_top5, train_loss, data_time = reduced.tolist()
+        if opt.multiprocessing_distributed:
+            metrics = torch.tensor([train_acc, train_acc_top5, train_loss, data_time]).cuda(opt.gpu, non_blocking=True)
+            reduced = reduce_tensor(metrics, opt.world_size if 'world_size' in opt else 1)
+            train_acc, train_acc_top5, train_loss, data_time = reduced.tolist()
+
         if not opt.multiprocessing_distributed or opt.rank % ngpus_per_node == 0:
             print(' * Epoch {}, GPU {}, Acc@1 {:.3f}, Acc@5 {:.3f}, Time {:.2f}, Data {:.2f}'.format(epoch, opt.gpu, train_acc, train_acc_top5, time2 - time1, data_time))
             
@@ -430,7 +432,7 @@ def main_worker(gpu, ngpus_per_node, opt):
                     'model': model_s.state_dict(),
                     'best_acc': best_acc,
                 }
-                if opt.distill == 'aakd':
+                if opt.distill == 'semckd':
                     state['attention'] = trainable_list[-1].state_dict()
                 save_file = os.path.join(opt.save_folder, '{}_best.pth'.format(opt.model_s))
                 
