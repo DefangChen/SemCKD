@@ -24,12 +24,13 @@ from models import model_dict
 from models.util import Embed, ConvReg, LinearEmbed, SelfA
 
 from dataset.cifar100 import get_cifar100_dataloaders, get_cifar100_dataloaders_sample
-from dataset.imagenet import get_imagenet_dataloader, get_dataloader_sample, imagenet_list
+from dataset.imagenet import get_imagenet_dataloader, imagenet_list
 from dataset.imagenet_dali import get_dali_data_loader
 
 from helper.util import adjust_learning_rate, save_dict_to_json, reduce_tensor
 
-from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, PKT, Correlation, VIDLoss, RKDLoss, SemCKDLoss, IRGLoss
+from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss, SemCKDLoss
+from distiller_zoo import IRGLoss, HKDLoss, PKT
 from crd.criterion import CRDLoss
 
 from helper.loops import train_distill as train, validate
@@ -60,15 +61,18 @@ def parse_option():
 
     # model
     parser.add_argument('--model_s', type=str, default='resnet8',
-                        choices=['resnet8', 'resnet14', 'resnet20', 'resnet32', 'resnet44', 'resnet56', 'resnet110', 'ResNet18', 'ResNet34', 
+                        choices=['resnet8', 'resnet14', 'resnet20', 'resnet32', 'resnet44', 'resnet56', 'resnet110',
+                                 'ResNet18', 'ResNet34', 'resnet8x4_double',
                                  'resnet8x4', 'resnet32x4', 'wrn_16_1', 'wrn_16_2', 'wrn_40_1', 'wrn_40_2', 'wrn_50_2',
-                                 'vgg8', 'vgg11', 'vgg13', 'vgg16', 'vgg19', 'ResNet50',
-                                 'MobileNetV2', 'ShuffleV1', 'ShuffleV2', 'ShuffleV2_Imagenet', 'MobileNetV2_Imagenet'])
+                                 'vgg8', 'vgg11', 'vgg13', 'vgg11_imagenet', 'vgg16', 'vgg19', 'ResNet50',
+                                 'MobileNetV2', 'ShuffleV1', 'ShuffleV2', 'ShuffleV2_Imagenet', 'MobileNetV2_Imagenet',
+                                 'shufflenet_v2_x0_5', 'shufflenet_v2_x2_0', 'ResNet18Double'])
     parser.add_argument('--path-t', type=str, default=None, help='teacher model snapshot')
 
     # distillation
-    parser.add_argument('--distill', type=str, default='kd', choices=['kd', 'hint', 'attention', 'similarity', 'vid', 
-                                                                      'correlation', 'rkd', 'pkt', 'crd', 'semckd', 'irg'])
+    parser.add_argument('--distill', type=str, default='kd', choices=['kd', 'hint', 'attention', 'similarity', 'vid',
+                                                                      'correlation', 'rkd', 'pkt', 'crd', 'semckd',
+                                                                      'irg', 'hkd'])
     parser.add_argument('--trial', type=str, default='1', help='trial id')
 
     parser.add_argument('-r', '--gamma', type=float, default=1.0, help='weight for classification')
@@ -111,6 +115,9 @@ def parse_option():
 
     parser.add_argument('--skip-validation', action='store_true', help='Skip validation of teacher')
 
+    parser.add_argument('--hkd_initial_weight', default=100, type=float, help='Initial layer weight for HKD method')
+    parser.add_argument('--hkd_decay', default=0.7, type=float, help='Layer weight decay for HKD method')
+
     opt = parser.parse_args()
 
     # set different learning rate from these 4 models
@@ -128,8 +135,9 @@ def parse_option():
 
     opt.model_t = get_teacher_name(opt.path_t)
 
-    opt.model_name = 'S:{}_T:{}_{}_{}_r:{}_a:{}_b:{}_{}'.format(opt.model_s, opt.model_t, opt.dataset, opt.distill,
-                                                                opt.gamma, opt.alpha, opt.beta, opt.trial)
+    model_name_template = split_symbol.join(['S', '{}_T', '{}_{}_{}_r', '{}_a', '{}_b', '{}_{}'])
+    opt.model_name = model_name_template.format(opt.model_s, opt.model_t, opt.dataset, opt.distill,
+                                                opt.gamma, opt.alpha, opt.beta, opt.trial)
 
     if opt.dali is not None:
         opt.model_name += '_dali:' + opt.dali
@@ -161,12 +169,12 @@ def get_teacher_name(model_path):
     return segments[0]
 
 
-def load_teacher(model_path, n_cls, gpu=None):
+def load_teacher(model_path, n_cls, gpu=None, opt=None):
     print('==> loading teacher model')
     model_t = get_teacher_name(model_path)
     model = model_dict[model_t](num_classes=n_cls)
     # TODO: reduce size of the teacher saved in train_teacher.py
-    map_location = None if gpu is None else {'cuda:0': 'cuda:%d' % gpu}
+    map_location = None if gpu is None else {'cuda:0': 'cuda:%d' % (gpu if opt.multiprocessing_distributed else 0)}
     model.load_state_dict(torch.load(model_path, map_location=map_location)['model'])
     print('==> done')
     return model
@@ -227,7 +235,7 @@ def main_worker(gpu, ngpus_per_node, opt):
     n_cls = class_num_map[opt.dataset]
 
     # model
-    model_t = load_teacher(opt.path_t, n_cls, opt.gpu)
+    model_t = load_teacher(opt.path_t, n_cls, opt.gpu, opt)
     module_args = {'num_classes': n_cls}
     model_s = model_dict[opt.model_s](**module_args)
     
@@ -266,7 +274,7 @@ def main_worker(gpu, ngpus_per_node, opt):
     elif opt.distill == 'crd':
         opt.s_dim = feat_s[-1].shape[1]
         opt.t_dim = feat_t[-1].shape[1]
-        opt.n_data = n_data
+        opt.n_data = 50000
         criterion_kd = CRDLoss(opt)
         module_list.append(criterion_kd.embed_s)
         module_list.append(criterion_kd.embed_t)
@@ -282,6 +290,8 @@ def main_worker(gpu, ngpus_per_node, opt):
         criterion_kd = IRGLoss()
     elif opt.distill == 'pkt':
         criterion_kd = PKT()
+    elif opt.distill == 'hkd':
+        criterion_kd = HKDLoss(init_weight=opt.hkd_initial_weight, decay=opt.hkd_decay)
     elif opt.distill == 'correlation':
         criterion_kd = Correlation()
         embed_s = LinearEmbed(feat_s[-1].shape[1], opt.feat_dim)
@@ -306,13 +316,6 @@ def main_worker(gpu, ngpus_per_node, opt):
     criterion_list.append(criterion_div)    # KL divergence loss, original knowledge distillation
     criterion_list.append(criterion_kd)     # other knowledge distillation loss
 
-    # optimizer
-    optimizer = optim.SGD(trainable_list.parameters(),
-                          lr=opt.learning_rate,
-                          momentum=opt.momentum,
-                          weight_decay=opt.weight_decay)
-
-    # append teacher after optimizer to avoid weight_decay
     module_list.append(model_t)
     
     if torch.cuda.is_available():
@@ -325,9 +328,6 @@ def main_worker(gpu, ngpus_per_node, opt):
                 module_list.cuda(opt.gpu)
                 distributed_modules = []
                 for module in module_list:
-                    # TODO: test apex.amp
-                    # DDP = torch.nn.parallel.DistributedDataParallel if opt.dali is None else apex.parallel.DistributedDataParallel
-                    # distributed_modules.append(DDP(module, delay_allreduce=True))
                     DDP = torch.nn.parallel.DistributedDataParallel
                     distributed_modules.append(DDP(module, device_ids=[opt.gpu]))
                 module_list = distributed_modules
@@ -339,6 +339,11 @@ def main_worker(gpu, ngpus_per_node, opt):
             module_list.cuda()
         if not opt.deterministic:
             cudnn.benchmark = True
+
+    optimizer = optim.SGD(trainable_list.parameters(),
+                          lr=opt.learning_rate,
+                          momentum=opt.momentum,
+                          weight_decay=opt.weight_decay)
 
     # dataloader
     if opt.dataset == 'cifar100':
@@ -352,11 +357,7 @@ def main_worker(gpu, ngpus_per_node, opt):
                                                                         num_workers=opt.num_workers)
     elif opt.dataset in imagenet_list:
         if opt.dali is None:
-            if opt.distill in ['crd']:
-                train_loader, val_loader, n_data = get_dataloader_sample(batch_size=opt.batch_size, num_workers=opt.num_workers,
-                                                                        k=opt.nce_k, is_sample=False)
-            else:
-                train_loader, val_loader, train_sampler = get_imagenet_dataloader(dataset=opt.dataset, batch_size=opt.batch_size,
+            train_loader, val_loader, train_sampler = get_imagenet_dataloader(dataset=opt.dataset, batch_size=opt.batch_size,
                                                                         num_workers=opt.num_workers,
                                                                         multiprocessing_distributed=opt.multiprocessing_distributed)
         else:

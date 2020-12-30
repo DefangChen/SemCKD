@@ -234,6 +234,10 @@ def resnet8x4(**kwargs):
     return ResNet(8, [32, 64, 128, 256], 'basicblock', **kwargs)
 
 
+def resnet8x4_double(**kwargs):
+    return ResNet(8, [64, 128, 256, 512], 'basicblock', **kwargs)
+
+
 def resnet32x4(**kwargs):
     return ResNet(32, [32, 64, 128, 256], 'basicblock', **kwargs)
 

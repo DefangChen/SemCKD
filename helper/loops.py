@@ -29,9 +29,9 @@ def train_vanilla(epoch, train_loader, model, criterion, optimizer, opt):
         
         # input = input.float()
         if opt.gpu is not None:
-            input = input.cuda(opt.gpu, non_blocking=True)
+            input = input.cuda(opt.gpu if opt.multiprocessing_distributed else 0, non_blocking=True)
         if torch.cuda.is_available():
-            target = target.cuda(opt.gpu, non_blocking=True)
+            target = target.cuda(opt.gpu if opt.multiprocessing_distributed else 0, non_blocking=True)
 
         # ===================forward=====================
         output = model(input)
@@ -106,9 +106,9 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
             input, target = data[0]['data'], data[0]['label'].squeeze().long()
 
         if opt.gpu is not None:
-            input = input.cuda(opt.gpu, non_blocking=True)
+            input = input.cuda(opt.gpu if opt.multiprocessing_distributed else 0, non_blocking=True)
         if torch.cuda.is_available():
-            target = target.cuda(opt.gpu, non_blocking=True)
+            target = target.cuda(opt.gpu if opt.multiprocessing_distributed else 0, non_blocking=True)
             if opt.distill in ['crd']:
                 index = index.cuda()
                 contrast_idx = contrast_idx.cuda()
@@ -160,6 +160,10 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
         elif opt.distill == 'pkt':
             f_s = feat_s[-1]
             f_t = feat_t[-1]
+            loss_kd = criterion_kd(f_s, f_t)
+        elif opt.distill == 'hkd':
+            f_s = feat_s[1:-1]
+            f_t = feat_t[1:-1]
             loss_kd = criterion_kd(f_s, f_t)
         elif opt.distill == 'correlation':
             f_s = module_list[1](feat_s[-1])
@@ -225,9 +229,9 @@ def validate(val_loader, model, criterion, opt):
                 input, target = batch_data[0]['data'], batch_data[0]['label'].squeeze().long()
 
             if opt.gpu is not None:
-                input = input.cuda(opt.gpu, non_blocking=True)
+                input = input.cuda(opt.gpu if opt.multiprocessing_distributed else 0, non_blocking=True)
             if torch.cuda.is_available():
-                target = target.cuda(opt.gpu, non_blocking=True)
+                target = target.cuda(opt.gpu if opt.multiprocessing_distributed else 0, non_blocking=True)
 
             # compute output
             output = model(input)

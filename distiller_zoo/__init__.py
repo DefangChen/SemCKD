@@ -8,3 +8,4 @@ from .SP import Similarity
 from .VID import VIDLoss
 from .IRG import IRGLoss
 from .SemCKD import SemCKDLoss
+from .HKD import HKDLoss

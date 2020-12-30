@@ -56,8 +56,10 @@ class VGG(nn.Module):
             for module in self.features[left:right]:
                 x = module(x)
             hidden_layers.append(x)
-        for module in self.features[self.split[-1]:]:
-            x = module(x)
+        if self.split[-1] < len(self.features):
+            for module in self.features[self.split[-1]:]:
+                x = module(x)
+            hidden_layers.append(x)
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
@@ -107,6 +109,7 @@ cfgs = {
 }
 
 splits = {
+    'A': [0, 2, 4, 7, 10],
     'B': [0, 3, 6, 9, 12]
 }
 
