@@ -3,8 +3,9 @@ import torch
 import torch.nn as nn
 
 
-# https://github.com/passalis/pkth/blob/master/nn/pkt_transfer.py
 def prob_loss(teacher_features, student_features, eps=1e-6, kernel_parameters={}):
+    """Heterogeneous Knowledge Distillation using Information Flow Modeling, CVPR2020
+    Code from author: https://github.com/passalis/pkth/blob/master/nn/pkt_transfer.py"""
     # Teacher kernel
     if kernel_parameters['teacher'] == 'rbf':
         teacher_d = pairwise_distances(teacher_features)

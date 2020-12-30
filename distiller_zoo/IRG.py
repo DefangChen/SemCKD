@@ -5,7 +5,8 @@ import torch.nn as nn
 
 
 class IRGLoss(nn.Module):
-    """Knowledge Distillation via Instance Relationship Graph, CVPR2019"""
+    """Knowledge Distillation via Instance Relationship Graph, CVPR2019
+    Code from author: https://github.com/yufanLIU/IRG"""
 
     def __init__(self, w_graph=1, w_transform=1):
         super(IRGLoss, self).__init__()
