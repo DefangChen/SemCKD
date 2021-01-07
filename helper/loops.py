@@ -102,6 +102,8 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
                 input, target, index, contrast_idx = data
             else:
                 input, target = data
+                if opt.distill == 'semckd' and input.shape[0] < opt.batch_size:
+                    continue
         else:
             input, target = data[0]['data'], data[0]['label'].squeeze().long()
 

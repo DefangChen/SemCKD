@@ -382,6 +382,7 @@ def main_worker(gpu, ngpus_per_node, opt):
     
     # routine
     for epoch in range(1, opt.epochs + 1):
+        torch.cuda.empty_cache()
         if opt.multiprocessing_distributed:
             if opt.dali is None:
                 train_sampler.set_epoch(epoch)

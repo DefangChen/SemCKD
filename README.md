@@ -18,7 +18,7 @@ Running SemCKD:
 
 ```bash
 # CIFAR-100
-python train_student.py --path_t ./save/models/resnet32x4_vanilla/ckpt_epoch_240.pth --distill semckd --model_s resnet8x4 -r 1 -a 1 -b 400 --trial 0
+python train_student.py --path-t ./save/models/resnet32x4_vanilla/ckpt_epoch_240.pth --distill semckd --model_s resnet8x4 -r 1 -a 1 -b 400 --trial 0
 # ImageNet
 python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transformed.pth \
 --batch_size 256 --epochs 90 --dataset imagenet --gpu_id 0,1,2,3,4,5,6,7 --dist-url tcp://127.0.0.1:23333 \
