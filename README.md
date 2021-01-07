@@ -2,9 +2,19 @@
 
 Cross-Layer Distillation with Semantic Calibration (AAAI-2021) https://arxiv.org/abs/2012.03236
 
-The existing *feature distillation* works can be separated into two categories according to the position where knowledge distillation is performed. One is *feature-map distillation* and another one is *feature-embedding distillation*. SemCKD belongs to *feature-map distillation* and is compatible with SOTA *feature-embedding distillation* (e.g., CRD) to further boost the performance of Student Networks.
+The existing *feature distillation* works can be separated into two categories according to the position where the knowledge distillation is performed. As shown in the figure below, one is *feature-map distillation* and another one is *feature-embedding distillation*.
 
-This repo contains the PyTorch-1.0 implementation of SemCKD together with the compared approaches, such as classic KD, *Feature-Map Distillation* variants like FitNet, AT, SP, VID, HKD and *feature-embedding distillation* variants like PKT, RKD, IRG, CC, CRD.
+![FD](./images/FD.png)
+
+SemCKD belongs to *feature-map distillation* and is compatible with SOTA *feature-embedding distillation* (e.g., CRD) to further boost the performance of Student Networks.
+
+This repo contains the implementation of SemCKD together with the compared approaches, such as classic KD, *Feature-Map Distillation* variants like FitNet, AT, SP, VID, HKD and *feature-embedding distillation* variants like PKT, RKD, IRG, CC, CRD.
+
+**CIFAR-100 Results**
+
+![result](./images/result.png)
+
+where *ARI* means *Average Relative Improvement*. This evaluation metric reflects the extent to which SemCKD further improves on the basis of existing approaches compared to improvements made by these approaches upon the baseline student model. 
 
 To get the pretrained teacher models for CIFAR-100:
 
@@ -26,11 +36,15 @@ python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transfo
 --multiprocessing-distributed --learning_rate 0.1 --lr_decay_epochs 30,60 --weight_decay 1e-4 --dali gpu
 ```
 
-**Notes:** 
+**Post Scripts:** 
 
-The main part of this repo was forked from https://github.com/HobbitLong/RepDistiller. The main difference in implementation is that we set both weights for classification loss and logit-level distillation loss as **1** throughout the experiments, which is a more common practice for knowledge distillation.  
+- Computing Infrastructure:
+  - For CIFAR-100,  we run experiments on a single machine that contains one NVIDIA GeForce TITAN X-Pascal GPU with 12 GB of RAM at 11.4 Gbps memory speed, 32 Inter (R) Xeon (R) CPU E5-2620 v4 @ 2.10GHz. The CUDA version is 10.2. The PyTorch version is 1.0.
+  - For ImageNet, we run experiments on a single machine that contains eight NVIDIA GeForce RTX 2080Ti GPUs with 11 GB of RAM at 14 Gbps memory speed, 64 Intel (R) Xeon (R) Silver 4216 CPU @ 2.10 GHz. The CUDA version is 10.2. The PyTorch version is 1.6.
 
-The codes in this repository is merged from different sources, and we have not tested them thoroughly. Hence, if you have any questions, please contact us without hesitation.
+- The main part of this repo was forked from https://github.com/HobbitLong/RepDistiller. The main difference in implementation is that we set both weights for classification loss and logit-level distillation loss as **1** throughout the experiments, which is a more common practice for knowledge distillation. (*-r 1 -a 1*) 
+
+- The codes in this repository was merged from different sources, and we have not tested them thoroughly. Hence, if you have any questions, please contact us without hesitation.
 
 ## Citation
 If you find this repository useful, please consider citing the following paper:
