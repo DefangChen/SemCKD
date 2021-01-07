@@ -4,7 +4,7 @@ output*/
 ckpts/
 *.pth
 *.t7
-#*.png
+*.png
 *.jpg
 tmp*.py
 

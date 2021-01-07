@@ -2,17 +2,9 @@
 
 Cross-Layer Distillation with Semantic Calibration (AAAI-2021) https://arxiv.org/abs/2012.03236
 
-The existing *feature distillation* works can be separated into two categories according to the position where knowledge distillation is performed. As shown in the figure below, one is *feature-map distillation* and another one is *feature-embedding distillation*.
-
-![FD](https://github.com/DefangChen/SemCKD/images/FD.png)
-
-SemCKD belongs to *feature-map distillation* and is compatible with SOTA *feature-embedding distillation* (e.g., CRD) to further boost the performance of Student Networks.
+The existing *feature distillation* works can be separated into two categories according to the position where knowledge distillation is performed. One is *feature-map distillation* and another one is *feature-embedding distillation*. SemCKD belongs to *feature-map distillation* and is compatible with SOTA *feature-embedding distillation* (e.g., CRD) to further boost the performance of Student Networks.
 
 This repo contains the PyTorch-1.0 implementation of SemCKD together with the compared approaches, such as classic KD, *Feature-Map Distillation* variants like FitNet, AT, SP, VID, HKD and *feature-embedding distillation* variants like PKT, RKD, IRG, CC, CRD.
-
-**CIFAR-100 Results**
-
-![result](https://github.com/DefangChen/SemCKD/images/result.png)
 
 To get the pretrained teacher models for CIFAR-100:
 
