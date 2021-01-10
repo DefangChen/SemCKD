@@ -30,7 +30,7 @@ from dataset.imagenet_dali import get_dali_data_loader
 from helper.util import adjust_learning_rate, save_dict_to_json, reduce_tensor
 
 from distiller_zoo import DistillKL, HintLoss, Attention, Similarity, Correlation, VIDLoss, RKDLoss, SemCKDLoss
-from distiller_zoo import IRGLoss, HKDLoss, PKT
+from distiller_zoo import IRGLoss, HKDLoss, PKT, MGDistiller, mgd_update
 from crd.criterion import CRDLoss
 
 from helper.loops import train_distill as train, validate
@@ -72,7 +72,7 @@ def parse_option():
     # distillation
     parser.add_argument('--distill', type=str, default='kd', choices=['kd', 'hint', 'attention', 'similarity', 'vid',
                                                                       'correlation', 'rkd', 'pkt', 'crd', 'semckd',
-                                                                      'irg', 'hkd'])
+                                                                      'irg', 'hkd', 'mgd'])
     parser.add_argument('--trial', type=str, default='1', help='trial id')
 
     parser.add_argument('-r', '--gamma', type=float, default=1.0, help='weight for classification')
@@ -117,6 +117,8 @@ def parse_option():
 
     parser.add_argument('--hkd_initial_weight', default=100, type=float, help='Initial layer weight for HKD method')
     parser.add_argument('--hkd_decay', default=0.7, type=float, help='Layer weight decay for HKD method')
+
+    parser.add_argument('--mgd-update-freq', default=2, type=int, help='update frequency for flowe matrix (default: 2)')
 
     opt = parser.parse_args()
 
@@ -308,6 +310,9 @@ def main_worker(gpu, ngpus_per_node, opt):
         )
         # add this as some parameters in VIDLoss need to be updated
         trainable_list.append(criterion_kd)
+    elif opt.distill == 'mgd':
+        criterion_kd = MGDistiller(model_t, model_s, [x.shape[1] for x in feat_t[1:-1]], [x.shape[1] for x in feat_s[1:-1]])
+        module_list.append(criterion_kd)
     else:
         raise NotImplementedError(opt.distill)
 
@@ -391,6 +396,8 @@ def main_worker(gpu, ngpus_per_node, opt):
         print("==> training...")
 
         time1 = time.time()
+        if opt.distill == 'mgd' and (epoch - 1) % opt.mgd_update_freq == 0:
+            mgd_update(train_loader, criterion_kd, opt)
         train_acc, train_acc_top5, train_loss, data_time = train(epoch, train_loader, module_list, criterion_list, optimizer, opt)
         time2 = time.time()
 

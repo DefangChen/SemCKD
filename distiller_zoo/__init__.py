@@ -9,3 +9,4 @@ from .VID import VIDLoss
 from .IRG import IRGLoss
 from .SemCKD import SemCKDLoss
 from .HKD import HKDLoss
+from .MGD import MGDistiller, mgd_update

@@ -176,6 +176,10 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
             g_t = feat_t[1:-1]
             loss_group = [c(f_s, f_t) for f_s, f_t, c in zip(g_s, g_t, criterion_kd)]
             loss_kd = sum(loss_group)
+        elif opt.distill == 'mgd':
+            f_s = feat_s[1:-1]
+            f_t = feat_t[1:-1]
+            loss_kd = criterion_kd(f_s, f_t) / opt.batch_size
         else:
             raise NotImplementedError(opt.distill)
 
