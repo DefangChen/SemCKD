@@ -66,6 +66,7 @@ def train_vanilla(epoch, train_loader, model, criterion, optimizer, opt):
     return top1.avg, top5.avg, losses.avg
 
 def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, opt):
+    print('train_distill')
     """One epoch distillation"""
     # set modules as train()
     for module in module_list:
@@ -177,9 +178,7 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
             loss_group = [c(f_s, f_t) for f_s, f_t, c in zip(g_s, g_t, criterion_kd)]
             loss_kd = sum(loss_group)
         elif opt.distill == 'mgd':
-            f_s = feat_s[1:-1]
-            f_t = feat_t[1:-1]
-            loss_kd = criterion_kd(f_s, f_t) / opt.batch_size
+            loss_kd = criterion_kd(feat_s, feat_t) / opt.batch_size
         else:
             raise NotImplementedError(opt.distill)
 

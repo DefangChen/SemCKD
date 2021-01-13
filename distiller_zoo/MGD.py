@@ -35,6 +35,8 @@ class MGDistiller(nn.Module):
                  s_net,
                  t_channels=[],
                  s_channels=[],
+                 t_ids=[],
+                 s_ids=[],
                  ignore_inds=[],
                  reducer='amp',
                  sync_bn=False,
@@ -44,6 +46,8 @@ class MGDistiller(nn.Module):
         super(MGDistiller, self).__init__()
         self.t_net = t_net
         self.s_net = s_net
+        self.t_ids = t_ids
+        self.s_ids = s_ids
         self.sync_bn = sync_bn
         self.preReLU = preReLU
         self.distributed = distributed
@@ -96,7 +100,7 @@ class MGDistiller(nn.Module):
     def extract_feature(self, x):
         t_feats, _ = self.t_net(x, is_feat=True, preact=self.preReLU)
         s_feats, _ = self.s_net(x, is_feat=True, preact=self.preReLU)
-        self.track_running_stats(t_feats[1:-1], s_feats[1:-1])
+        self.track_running_stats([t_feats[x] for x in self.t_ids], [s_feats[x] for x in self.s_ids])
 
     def track_running_stats(self, t_feats, s_feats):
         feat_num = min(len(t_feats), len(s_feats))
@@ -306,6 +310,9 @@ class MGDistiller(nn.Module):
         return loss_kd
 
     def forward(self, s_feats, t_feats):
+        t_feats = [t_feats[x] for x in self.t_ids]
+        s_feats = [s_feats[x] for x in self.s_ids]
+        
         feat_num = min(len(t_feats), len(s_feats))
 
         loss_factors = [2 ** (feat_num - i - 1) for i in range(feat_num)]
@@ -580,7 +587,7 @@ def mgd_update(extra_loader, model, args):
 
     with torch.no_grad():
         for i, (images, _) in enumerate(extra_loader):
-            images = images.cuda(args.gpu, non_blocking=True)
+            images = images.cuda(args.gpu if args.multiprocessing_distributed else 0, non_blocking=True)
 
             # running for tracking status
             model.extract_feature(images)

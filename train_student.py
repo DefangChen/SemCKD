@@ -93,8 +93,8 @@ def parse_option():
     parser.add_argument('--hint_layer', default=1, type=int, choices=[0, 1, 2, 3, 4])
 
     # transform layers for IRG
-    parser.add_argument('--transform_layer_t', nargs='+', type=int, default = [])
-    parser.add_argument('--transform_layer_s', nargs='+', type=int, default = [])
+    parser.add_argument('--transform_layer_t', nargs='+', type=int, default=[])
+    parser.add_argument('--transform_layer_s', nargs='+', type=int, default=[])
 
     # switch for edge transformation
     parser.add_argument('--no_edge_transform', action='store_true') # default=false
@@ -119,6 +119,8 @@ def parse_option():
     parser.add_argument('--hkd_decay', default=0.7, type=float, help='Layer weight decay for HKD method')
 
     parser.add_argument('--mgd-update-freq', default=2, type=int, help='update frequency for flowe matrix (default: 2)')
+    parser.add_argument('--mgd-t-layer', nargs='+', type=int, default=[])
+    parser.add_argument('--mgd-s-layer', nargs='+', type=int, default=[])
 
     opt = parser.parse_args()
 
@@ -251,6 +253,12 @@ def main_worker(gpu, ngpus_per_node, opt):
     feat_t, _ = model_t(data, is_feat=True)
     feat_s, _ = model_s(data, is_feat=True)
 
+    for f in feat_s:
+        print(f.shape)
+    for f in feat_t:
+        print(f.shape)
+    # return 
+
     module_list = nn.ModuleList([])
     module_list.append(model_s)
     trainable_list = nn.ModuleList([])
@@ -311,7 +319,22 @@ def main_worker(gpu, ngpus_per_node, opt):
         # add this as some parameters in VIDLoss need to be updated
         trainable_list.append(criterion_kd)
     elif opt.distill == 'mgd':
-        criterion_kd = MGDistiller(model_t, model_s, [x.shape[1] for x in feat_t[1:-1]], [x.shape[1] for x in feat_s[1:-1]])
+        if len(opt.mgd_t_layer) > 0 and len(opt.mgd_s_layer) > 0:
+            f_t = opt.mgd_t_layer
+            f_s = opt.mgd_s_layer
+        else:
+            f_t = []
+            f_s = []
+            for j in range(len(feat_s)):
+                s = feat_s[j]
+                for i in range(f_t[-1] + 1 if len(f_t) > 0 else 0, len(feat_t)):
+                    if len(s.shape) == len(feat_t[i].shape) and len(s.shape) > 2 and s.shape[2:] == feat_t[i].shape[2:] and s.shape[1] <= feat_t[i].shape[1]:
+                        f_s.append(j)
+                        f_t.append(i)
+                        break
+        print(f_t)
+        print(f_s)
+        criterion_kd = MGDistiller(model_t, model_s, [feat_t[x].shape[1] for x in f_t], [feat_s[x].shape[1] for x in f_s], f_t, f_s)
         module_list.append(criterion_kd)
     else:
         raise NotImplementedError(opt.distill)
@@ -358,13 +381,15 @@ def main_worker(gpu, ngpus_per_node, opt):
                                                                                k=opt.nce_k,
                                                                                mode=opt.mode)
         else:
-            train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size,
-                                                                        num_workers=opt.num_workers)
+            res = get_cifar100_dataloaders(batch_size=opt.batch_size,
+                                           num_workers=opt.num_workers, extra=opt.distill == 'mgd')
+            train_loader, val_loader = res[0], res[1]
+            extra_loader = None if len(res) < 3 else res[2]
     elif opt.dataset in imagenet_list:
         if opt.dali is None:
             train_loader, val_loader, train_sampler = get_imagenet_dataloader(dataset=opt.dataset, batch_size=opt.batch_size,
-                                                                        num_workers=opt.num_workers,
-                                                                        multiprocessing_distributed=opt.multiprocessing_distributed)
+                                                                              num_workers=opt.num_workers,
+                                                                              multiprocessing_distributed=opt.multiprocessing_distributed)
         else:
             train_loader, val_loader = get_dali_data_loader(opt)
     else:
@@ -397,7 +422,7 @@ def main_worker(gpu, ngpus_per_node, opt):
 
         time1 = time.time()
         if opt.distill == 'mgd' and (epoch - 1) % opt.mgd_update_freq == 0:
-            mgd_update(train_loader, criterion_kd, opt)
+            mgd_update(extra_loader, criterion_kd, opt)
         train_acc, train_acc_top5, train_loss, data_time = train(epoch, train_loader, module_list, criterion_list, optimizer, opt)
         time2 = time.time()
 

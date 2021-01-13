@@ -10,7 +10,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torchvision import datasets
 from torchvision import transforms
 
-from dataset.folder2lmdb import ImageFolderLMDB
+# from dataset.folder2lmdb import ImageFolderLMDB
 
 imagenet_list = ['imagenet', 'imagenette']
 
