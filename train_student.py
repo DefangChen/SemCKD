@@ -325,15 +325,14 @@ def main_worker(gpu, ngpus_per_node, opt):
         else:
             f_t = []
             f_s = []
-            for j in range(len(feat_s)):
+            for j in range(1, len(feat_s)-1):
                 s = feat_s[j]
-                for i in range(f_t[-1] + 1 if len(f_t) > 0 else 0, len(feat_t)):
+                for i in range(f_t[-1] + 1 if len(f_t) > 0 else 1, len(feat_t)-1):
                     if len(s.shape) == len(feat_t[i].shape) and len(s.shape) > 2 and s.shape[2:] == feat_t[i].shape[2:] and s.shape[1] <= feat_t[i].shape[1]:
                         f_s.append(j)
                         f_t.append(i)
+                        print(s.shape, 'match', feat_t[i].shape)
                         break
-        print(f_t)
-        print(f_s)
         criterion_kd = MGDistiller(model_t, model_s, [feat_t[x].shape[1] for x in f_t], [feat_s[x].shape[1] for x in f_s], f_t, f_s)
         module_list.append(criterion_kd)
     else:

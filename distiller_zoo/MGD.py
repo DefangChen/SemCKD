@@ -74,8 +74,9 @@ class MGDistiller(nn.Module):
 
     def init_margins(self):
         print('mgd info: init margins')
-        margins = [get_margin_from_BN(bn)
-                   for bn in self.t_net.get_bn_before_relu()]
+        q = self.t_net.get_bn_before_relu()
+        q = [q[x-1] for x in self.t_ids]
+        margins = [get_margin_from_BN(bn) for bn in q]
         for i, margin in enumerate(margins):
             self.register_buffer(
                 'margin%d' % (i+1),

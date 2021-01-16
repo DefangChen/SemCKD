@@ -93,11 +93,15 @@ class WideResNet(nn.Module):
         feat_m.append(self.block3)
         return feat_m
 
-    def get_bn_before_relu(self):
-        bn1 = self.block2.layer[0].bn1
-        bn2 = self.block3.layer[0].bn1
-        bn3 = self.bn1
-
+    def get_bn_before_relu(self, preact=False):
+        if preact:
+            bn1 = self.block2.layer[0].bn1
+            bn2 = self.block3.layer[0].bn1
+            bn3 = self.bn1
+        else:
+            bn1 = self.block1.layer[-1].bn2
+            bn2 = self.block2.layer[-1].bn2
+            bn3 = self.block3.layer[-1].bn2
         return [bn1, bn2, bn3]
 
     def forward(self, x, is_feat=False, preact=False):
