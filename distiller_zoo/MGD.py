@@ -40,7 +40,7 @@ class MGDistiller(nn.Module):
                  ignore_inds=[],
                  reducer='amp',
                  sync_bn=False,
-                 preReLU=False,  # TODO: T or F
+                 preReLU=True,
                  distributed=False,
                  ):
         super(MGDistiller, self).__init__()

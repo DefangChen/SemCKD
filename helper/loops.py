@@ -117,9 +117,9 @@ def train_distill(epoch, train_loader, module_list, criterion_list, optimizer, o
                 contrast_idx = contrast_idx.cuda()
 
         # ===================forward=====================
-        feat_s, logit_s = model_s(input, is_feat=True)
+        feat_s, logit_s = model_s(input, is_feat=True, preact=opt.preact)
         with torch.no_grad():
-            feat_t, logit_t = model_t(input, is_feat=True)
+            feat_t, logit_t = model_t(input, is_feat=True, preact=opt.preact)
             feat_t = [f.detach() for f in feat_t]
 
         # cls + kl div

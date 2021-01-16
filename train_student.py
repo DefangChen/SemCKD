@@ -122,6 +122,8 @@ def parse_option():
     parser.add_argument('--mgd-t-layer', nargs='+', type=int, default=[])
     parser.add_argument('--mgd-s-layer', nargs='+', type=int, default=[])
 
+    parser.add_argument('--preact', action='store_true', help='Use tensor before relu as feature map (default: False)')
+
     opt = parser.parse_args()
 
     # set different learning rate from these 4 models
@@ -250,8 +252,8 @@ def main_worker(gpu, ngpus_per_node, opt):
 
     model_t.eval()
     model_s.eval()
-    feat_t, _ = model_t(data, is_feat=True)
-    feat_s, _ = model_s(data, is_feat=True)
+    feat_t, _ = model_t(data, is_feat=True, preact=opt.preact)
+    feat_s, _ = model_s(data, is_feat=True, preact=opt.preact)
 
     for f in feat_s:
         print(f.shape)
@@ -333,7 +335,7 @@ def main_worker(gpu, ngpus_per_node, opt):
                         f_t.append(i)
                         print(s.shape, 'match', feat_t[i].shape)
                         break
-        criterion_kd = MGDistiller(model_t, model_s, [feat_t[x].shape[1] for x in f_t], [feat_s[x].shape[1] for x in f_s], f_t, f_s)
+        criterion_kd = MGDistiller(model_t, model_s, [feat_t[x].shape[1] for x in f_t], [feat_s[x].shape[1] for x in f_s], f_t, f_s, preReLU=opt.preact)
         module_list.append(criterion_kd)
     else:
         raise NotImplementedError(opt.distill)
