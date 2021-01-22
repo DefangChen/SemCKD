@@ -10,6 +10,8 @@ from torch.utils.data.distributed import DistributedSampler
 from torchvision import datasets
 from torchvision import transforms
 
+from .sampler import ExtraDistributedSampler
+
 # from dataset.folder2lmdb import ImageFolderLMDB
 
 imagenet_list = ['imagenet', 'imagenette']
@@ -182,7 +184,7 @@ def get_dataloader_sample(dataset='imagenet', batch_size=128, num_workers=8, is_
 
 
 def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, use_lmdb=False,
-                            multiprocessing_distributed=False):
+                            multiprocessing_distributed=False, extra=False):
     """
     Data Loader for imagenet
     """
@@ -242,5 +244,12 @@ def get_imagenet_dataloader(dataset='imagenet', batch_size=128, num_workers=16, 
                              num_workers=num_workers,
                              pin_memory=True,
                              sampler=test_sampler)
+
+    if multiprocessing_distributed and extra:
+        extra_sampler = ExtraDistributedSampler(train_set)
+        extra_loader = DataLoader(train_set,
+                                  batch_size=batch_size, shuffle=(extra_sampler is None),
+                                  num_workers=num_workers, pin_memory=True, sampler=extra_sampler)
+        return train_loader, test_loader, train_sampler, extra_loader, extra_sampler
 
     return train_loader, test_loader, train_sampler

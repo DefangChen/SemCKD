@@ -45,12 +45,13 @@ def channel_shuffle(x, groups):
 
 
 class InvertedResidual(nn.Module):
-    def __init__(self, inp, oup, stride):
+    def __init__(self, inp, oup, stride, is_last=False):
         super(InvertedResidual, self).__init__()
 
         if not (1 <= stride <= 3):
             raise ValueError('illegal stride value')
         self.stride = stride
+        self.is_last = is_last
 
         branch_features = oup // 2
         assert (self.stride != 1) or (inp == branch_features << 1)
@@ -85,12 +86,16 @@ class InvertedResidual(nn.Module):
     def forward(self, x):
         if self.stride == 1:
             x1, x2 = x.chunk(2, dim=1)
-            out = torch.cat((x1, self.branch2(x2)), dim=1)
+            preact = self.branch2[:-1](x2)
+            out = torch.cat((x1, self.branch2[-1](preact)), dim=1)
         else:
-            out = torch.cat((self.branch1(x), self.branch2(x)), dim=1)
+            preact = self.branch2[:-1](x)
+            out = torch.cat((self.branch1(x), self.branch2[-1](preact)), dim=1)
 
         out = channel_shuffle(out, 2)
 
+        if self.is_last:
+            return out, preact
         return out
 
 
@@ -120,7 +125,7 @@ class ShuffleNetV2(nn.Module):
                 stage_names, stages_repeats, self._stage_out_channels[1:]):
             seq = [inverted_residual(input_channels, output_channels, 2)]
             for i in range(repeats - 1):
-                seq.append(inverted_residual(output_channels, output_channels, 1))
+                seq.append(inverted_residual(output_channels, output_channels, 1, is_last=(i == repeats-2)))
             setattr(self, name, nn.Sequential(*seq))
             input_channels = output_channels
 
@@ -137,32 +142,38 @@ class ShuffleNetV2(nn.Module):
         # See note [TorchScript super()]
         x = self.conv1(x)
         x = self.maxpool(x)
-        x = self.stage2(x)
-        x = self.stage3(x)
-        x = self.stage4(x)
+        x, _ = self.stage2(x)
+        x, _ = self.stage3(x)
+        x, _ = self.stage4(x)
         x = self.conv5(x)
         x = x.mean([2, 3])  # globalpool
         x = self.fc(x)
         return x
 
-    def forward(self, x, is_feat=False):
+    def forward(self, x, is_feat=False, preact=False):
         if not is_feat:
             return self._forward_impl(x)
         hidden_layers = []
         x = self.conv1(x)
         x = self.maxpool(x)
         hidden_layers.append(x)
-        x = self.stage2(x)
-        hidden_layers.append(x)
-        x = self.stage3(x)
-        hidden_layers.append(x)
-        x = self.stage4(x)
-        hidden_layers.append(x)
+        x, pre1 = self.stage2(x)
+        hidden_layers.append(pre1 if preact else x)
+        x, pre2 = self.stage3(x)
+        hidden_layers.append(pre2 if preact else x)
+        x, pre3 = self.stage4(x)
+        hidden_layers.append(pre3 if preact else x)
         x = self.conv5(x)
         x = x.mean([2, 3])  # globalpool
         hidden_layers.append(x)
         x = self.fc(x)
         return hidden_layers, x
+    
+    def get_bn_before_relu(self):
+        bn1 = self.stage2[-1][-2]
+        bn2 = self.stage3[-1][-2]
+        bn3 = self.stage4[-1][-2]
+        return [bn1, bn2, bn3]
 
 
 def _shufflenetv2(arch, pretrained, progress, *args, **kwargs):

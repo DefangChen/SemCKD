@@ -1,6 +1,6 @@
 # Copied from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
 # Only two changes:
-# 1. Resnet.forward() is modified to return inner feature maps.
+# 1. Resnet.forward() is modified to return inner feature maps(including pre-ReLU feature maps).
 # 2. merge utils.py into this file to import load_state_dict_from_url.
 
 import torch
@@ -46,7 +46,7 @@ class BasicBlock(nn.Module):
     expansion = 1
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
-                 base_width=64, dilation=1, norm_layer=None):
+                 base_width=64, dilation=1, norm_layer=None, is_last=False):
         super(BasicBlock, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -62,6 +62,7 @@ class BasicBlock(nn.Module):
         self.bn2 = norm_layer(planes)
         self.downsample = downsample
         self.stride = stride
+        self.is_last = is_last
 
     def forward(self, x):
         identity = x
@@ -77,9 +78,11 @@ class BasicBlock(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out = self.relu(out)
+        after_relu = self.relu(out)
 
-        return out
+        if self.is_last:
+            return after_relu, out
+        return after_relu
 
 
 class Bottleneck(nn.Module):
@@ -92,7 +95,7 @@ class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
-                 base_width=64, dilation=1, norm_layer=None):
+                 base_width=64, dilation=1, norm_layer=None, is_last=False):
         super(Bottleneck, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -107,6 +110,7 @@ class Bottleneck(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
+        self.is_last = is_last
 
     def forward(self, x):
         identity = x
@@ -126,9 +130,11 @@ class Bottleneck(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out = self.relu(out)
+        after_relu = self.relu(out)
 
-        return out
+        if self.is_last:
+            return after_relu, out
+        return after_relu
 
 
 class ResNet(nn.Module):
@@ -205,7 +211,7 @@ class ResNet(nn.Module):
         for _ in range(1, blocks):
             layers.append(block(self.inplanes, planes, groups=self.groups,
                                 base_width=self.base_width, dilation=self.dilation,
-                                norm_layer=norm_layer))
+                                norm_layer=norm_layer, is_last=(_ == blocks-1)))
 
         return nn.Sequential(*layers)
 
@@ -216,10 +222,10 @@ class ResNet(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        x, _ = self.layer1(x)
+        x, _ = self.layer2(x)
+        x, _ = self.layer3(x)
+        x, _ = self.layer4(x)
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
@@ -227,7 +233,25 @@ class ResNet(nn.Module):
 
         return x
 
-    def forward(self, x, is_feat=False):
+    # functions for distillation
+    def get_bn_before_relu(self):
+        if isinstance(self.layer1[0], Bottleneck):
+            bn1 = self.layer1[-1].bn3
+            bn2 = self.layer2[-1].bn3
+            bn3 = self.layer3[-1].bn3
+            bn4 = self.layer4[-1].bn3
+        elif isinstance(self.layer1[0], BasicBlock):
+            bn1 = self.layer1[-1].bn2
+            bn2 = self.layer2[-1].bn2
+            bn3 = self.layer3[-1].bn2
+            bn4 = self.layer4[-1].bn2
+        else:
+            print('ResNet unknown block error !!!')
+            raise
+
+        return [bn1, bn2, bn3, bn4]
+
+    def forward(self, x, is_feat=False, preact=False):
         if is_feat:
             x = self.conv1(x)
             x = self.bn1(x)
@@ -235,19 +259,21 @@ class ResNet(nn.Module):
             x = self.maxpool(x)
             f0 = x
 
-            x = self.layer1(x)
+            x, pre1 = self.layer1(x)
             f1 = x
-            x = self.layer2(x)
+            x, pre2 = self.layer2(x)
             f2 = x
-            x = self.layer3(x)
+            x, pre3 = self.layer3(x)
             f3 = x
-            x = self.layer4(x)
+            x, pre4 = self.layer4(x)
             f4 = x
 
             x = self.avgpool(x)
             x = torch.flatten(x, 1)
             f5 = x
             x = self.fc(x)
+            if preact:
+                return [f0, pre1, pre2, pre3, pre4, f5], x
             return [f0, f1, f2, f3, f4, f5], x
         else:
             return self._forward_impl(x)

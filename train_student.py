@@ -99,7 +99,7 @@ def parse_option():
     # switch for edge transformation
     parser.add_argument('--no_edge_transform', action='store_true') # default=false
     
-    parser.add_argument('--use-lmdb', action='store_true') # default=false
+    # parser.add_argument('--use-lmdb', action='store_true') # default=false
 
     parser.add_argument('--dali', type=str, choices=['cpu', 'gpu'], default=None)
 
@@ -207,6 +207,7 @@ def main():
         mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, opt))
     else:
         main_worker(None if ngpus_per_node > 1 else opt.gpu_id, ngpus_per_node, opt)
+
 
 def main_worker(gpu, ngpus_per_node, opt):
     global best_acc, total_time
@@ -335,8 +336,9 @@ def main_worker(gpu, ngpus_per_node, opt):
                         f_t.append(i)
                         print(s.shape, 'match', feat_t[i].shape)
                         break
-        criterion_kd = MGDistiller(model_t, model_s, [feat_t[x].shape[1] for x in f_t], [feat_s[x].shape[1] for x in f_s], f_t, f_s, preReLU=opt.preact)
-        module_list.append(criterion_kd)
+        criterion_kd = MGDistiller(model_t, model_s, [feat_t[x].shape[1] for x in f_t], [feat_s[x].shape[1] for x in f_s], f_t, f_s, preReLU=opt.preact, distributed=opt.multiprocessing_distributed)
+        BNs = criterion_kd.module.BNs if hasattr(criterion_kd, 'module') else criterion_kd.BNs
+        trainable_list.append(BNs)
     else:
         raise NotImplementedError(opt.distill)
 
@@ -388,9 +390,12 @@ def main_worker(gpu, ngpus_per_node, opt):
             extra_loader = None if len(res) < 3 else res[2]
     elif opt.dataset in imagenet_list:
         if opt.dali is None:
-            train_loader, val_loader, train_sampler = get_imagenet_dataloader(dataset=opt.dataset, batch_size=opt.batch_size,
+            res = get_imagenet_dataloader(dataset=opt.dataset, batch_size=opt.batch_size,
                                                                               num_workers=opt.num_workers,
-                                                                              multiprocessing_distributed=opt.multiprocessing_distributed)
+                                                                              multiprocessing_distributed=opt.multiprocessing_distributed,
+                                                                              extra=opt.distill == 'mgd')
+            train_loader, val_loader, train_sampler = res[0:3]
+            extra_loader, _ = res[3:5] if len(res) >= 5 else (None, None)
         else:
             train_loader, val_loader = get_dali_data_loader(opt)
     else:
