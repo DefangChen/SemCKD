@@ -90,7 +90,10 @@ class ShuffleNet(nn.Module):
         return feat_m
 
     def get_bn_before_relu(self):
-        raise NotImplementedError('ShuffleNet currently is not supported for "Overhaul" teacher')
+        bn1 = self.layer1[-1].bn3
+        bn2 = self.layer1[-1].bn3
+        bn3 = self.layer1[-1].bn3
+        return [bn1, bn2, bn3]
 
     def forward(self, x, is_feat=False, preact=False):
         out = F.relu(self.bn1(self.conv1(x)))
