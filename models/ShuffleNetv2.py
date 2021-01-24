@@ -52,7 +52,8 @@ class BasicBlock(nn.Module):
         preact = self.bn3(self.conv3(out))
         out = F.relu(preact)
         # out = F.relu(self.bn3(self.conv3(out)))
-        preact = torch.cat([x1, preact], 1)
+        # The following line is removed to make bn consistent with preact
+        # preact = torch.cat([x1, preact], 1)
         out = torch.cat([x1, out], 1)
         out = self.shuffle(out)
         if self.is_last:
@@ -135,7 +136,10 @@ class ShuffleNetV2(nn.Module):
         return feat_m
 
     def get_bn_before_relu(self):
-        raise NotImplementedError('ShuffleNetV2 currently is not supported for "Overhaul" teacher')
+        bn1 = self.layer1[-1].bn3
+        bn2 = self.layer2[-1].bn3
+        bn3 = self.layer3[-1].bn3
+        return [bn1, bn2, bn3]
 
     def forward(self, x, is_feat=False, preact=False):
         out = F.relu(self.bn1(self.conv1(x)))
