@@ -27,3 +27,5 @@ python train_student.py --path-t ./save/models/resnet32x4_vanilla/ckpt_epoch_240
 python train_student.py --path-t ./save/models/resnet32x4_vanilla/ckpt_epoch_240.pth --distill pkt --model_s resnet8x4_double -r 1 -a 1 -b 30000 --trial 1
 python train_student.py --path-t ./save/student_model/S:resnet8x4_double_T:resnet32x4_cifar100_pkt_r:1.0_a:1.0_b:30000.0_1/resnet8x4_double_best.pth  \
 --distill hkd --model_s resnet8x4 -r 1 -a 1 -b 1 --trial 1
+# MGD(preact=True)
+python train_student.py --path-t ./save/models/resnet32x4_vanilla/ckpt_epoch_240.pth --distill mgd --model_s resnet8x4 -r 1 -a 1 -b 0.0001 --preact --trial 1

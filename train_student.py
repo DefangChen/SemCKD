@@ -66,7 +66,8 @@ def parse_option():
                                  'resnet8x4', 'resnet32x4', 'wrn_16_1', 'wrn_16_2', 'wrn_40_1', 'wrn_40_2', 'wrn_50_2',
                                  'vgg8', 'vgg11', 'vgg13', 'vgg11_imagenet', 'vgg16', 'vgg19', 'ResNet50',
                                  'MobileNetV2', 'ShuffleV1', 'ShuffleV2', 'ShuffleV2_Imagenet', 'MobileNetV2_Imagenet',
-                                 'shufflenet_v2_x0_5', 'shufflenet_v2_x2_0', 'ResNet18Double'])
+                                 'shufflenet_v2_x0_5', 'shufflenet_v2_x2_0', 'ResNet18Double', 'vgg8_bn_double',
+                                 'MobileNetV2Double', 'ShuffleV2Double', 'vgg13_bn_double', 'wrn_16_4'])
     parser.add_argument('--path-t', type=str, default=None, help='teacher model snapshot')
 
     # distillation

@@ -1,13 +1,13 @@
 from .resnet import resnet8, resnet14, resnet20, resnet32, resnet44, resnet56, resnet110, resnet8x4, resnet32x4
 from .resnet import resnet8x4_double
 from .resnetv2 import resnet18, resnet34, resnet50, wide_resnet50_2, resnext50_32x4d, resnet34x4, resnet18x2
-from .wrn import wrn_16_1, wrn_16_2, wrn_40_1, wrn_40_2
-from .vgg import vgg19_bn, vgg16_bn, vgg13_bn, vgg11_bn, vgg8_bn
+from .wrn import wrn_16_1, wrn_16_2, wrn_16_4, wrn_40_1, wrn_40_2
+from .vgg import vgg19_bn, vgg16_bn, vgg13_bn, vgg11_bn, vgg8_bn, vgg8_bn_double, vgg13_bn_double
 from .vggv2 import vgg13_bn as vgg13_imagenet, vgg11_bn as vgg11_imagenet
-from .mobilenetv2 import mobile_half
+from .mobilenetv2 import mobile_half, mobile
 from .mobilenetv2_imagenet import mobilenet_v2
 from .ShuffleNetv1 import ShuffleV1
-from .ShuffleNetv2 import ShuffleV2
+from .ShuffleNetv2 import ShuffleV2, ShuffleV2Double
 from .ShuffleNetv2_Imagenet import shufflenet_v2_x1_0 as ShuffleNetV2Imagenet, shufflenet_v2_x0_5, shufflenet_v2_x2_0
 
 model_dict = {
@@ -29,10 +29,13 @@ model_dict = {
     'resnet34x4': resnet34x4,
     'wrn_16_1': wrn_16_1,
     'wrn_16_2': wrn_16_2,
+    'wrn_16_4': wrn_16_4,
     'wrn_40_1': wrn_40_1,
     'wrn_40_2': wrn_40_2,
     'wrn_50_2': wide_resnet50_2,
     'vgg8': vgg8_bn,
+    'vgg8_bn_double': vgg8_bn_double,
+    'vgg13_bn_double': vgg13_bn_double,
     'vgg11': vgg11_bn,
     'vgg13': vgg13_bn,
     'vgg16': vgg16_bn,
@@ -40,9 +43,11 @@ model_dict = {
     'vgg13_imagenet': vgg13_imagenet,
     'vgg11_imagenet': vgg11_imagenet,
     'MobileNetV2': mobile_half,
+    'MobileNetV2Double': mobile,
     'MobileNetV2_Imagenet': mobilenet_v2,
     'ShuffleV1': ShuffleV1,
     'ShuffleV2': ShuffleV2,
+    'ShuffleV2Double': ShuffleV2Double,
     'ShuffleV2_Imagenet': ShuffleNetV2Imagenet,
     'shufflenet_v2_x0_5': shufflenet_v2_x0_5,
     'shufflenet_v2_x2_0': shufflenet_v2_x2_0,

@@ -201,6 +201,11 @@ def ShuffleV2(**kwargs):
     return model
 
 
+def ShuffleV2Double(**kwargs):
+    model = ShuffleNetV2(net_size=2, **kwargs)
+    return model
+
+
 if __name__ == '__main__':
     net = ShuffleV2(num_classes=100)
     x = torch.randn(3, 3, 32, 32)

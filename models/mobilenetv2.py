@@ -184,6 +184,10 @@ def mobile_half(num_classes):
     return mobilenetv2_T_w(6, 0.5, num_classes)
 
 
+def mobile(num_classes):
+    return mobilenetv2_T_w(6, 1.0, num_classes)
+
+
 if __name__ == '__main__':
     x = torch.randn(2, 3, 32, 32)
 

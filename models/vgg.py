@@ -158,6 +158,15 @@ def vgg8_bn(**kwargs):
     return model
 
 
+def vgg8_bn_double(**kwargs):
+    """VGG 8-layer model (configuration "S")
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = VGG([[x[0] * 2] for x in cfg['S'][:-1]] + [[512]], batch_norm=True, **kwargs)
+    return model
+
+
 def vgg11(**kwargs):
     """VGG 11-layer model (configuration "A")
     Args:
@@ -179,6 +188,15 @@ def vgg13(**kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     model = VGG(cfg['B'], **kwargs)
+    return model
+
+
+def vgg13_bn_double(**kwargs):
+    """VGG 8-layer model (configuration "S")
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = VGG([[x[0] * 2] for x in cfg['B'][:-1]] + [[512, 512]], batch_norm=True, **kwargs)
     return model
 
 
