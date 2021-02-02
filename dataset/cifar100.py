@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, SubsetRandomSampler
 from torchvision import datasets, transforms
 from PIL import Image
 
@@ -69,7 +69,7 @@ class CIFAR100Instance(CIFAR100BackCompat):
         return img, target, index
 
 
-def get_cifar100_dataloaders(batch_size=128, num_workers=8, is_instance=False, extra=False):
+def get_cifar100_dataloaders(batch_size=128, num_workers=8, is_instance=False, extra=False, dataset_indices=None):
     """
     cifar 100
     """
@@ -86,12 +86,14 @@ def get_cifar100_dataloaders(batch_size=128, num_workers=8, is_instance=False, e
         transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
     ])
 
+    sampler = None if dataset_indices is None else SubsetRandomSampler(dataset_indices)
+
     if is_instance:
         train_set = CIFAR100Instance(root=data_folder,
                                      download=True,
                                      train=True,
                                      transform=train_transform)
-        n_data = len(train_set)
+        n_data = len(train_set) if dataset_indices is None else len(dataset_indices)
     else:
         train_set = datasets.CIFAR100(root=data_folder,
                                       download=True,
@@ -99,13 +101,15 @@ def get_cifar100_dataloaders(batch_size=128, num_workers=8, is_instance=False, e
                                       transform=train_transform)
     train_loader = DataLoader(train_set,
                               batch_size=batch_size,
-                              shuffle=True,
-                              num_workers=num_workers)
+                              shuffle=sampler is None,
+                              num_workers=num_workers,
+                              sampler=sampler)
     if extra:
         extra_loader = DataLoader(train_set,
                                   batch_size=batch_size,
-                                  shuffle=True,
-                                  num_workers=num_workers)
+                                  shuffle=sampler is None,
+                                  num_workers=num_workers,
+                                  sampler=sampler)
 
     test_set = datasets.CIFAR100(root=data_folder,
                                  download=True,
@@ -196,7 +200,7 @@ class CIFAR100InstanceSample(CIFAR100BackCompat):
             return img, target, index, sample_idx
 
 def get_cifar100_dataloaders_sample(batch_size=128, num_workers=8, k=4096, mode='exact',
-                                    is_sample=True, percent=1.0):
+                                    is_sample=True, percent=1.0, dataset_indices=None):
     """
     cifar 100
     """
@@ -221,11 +225,13 @@ def get_cifar100_dataloaders_sample(batch_size=128, num_workers=8, k=4096, mode=
                                        mode=mode,
                                        is_sample=is_sample,
                                        percent=percent)
-    n_data = len(train_set)
+    n_data = len(train_set) if dataset_indices is None else len(dataset_indices)
+    sampler = None if dataset_indices is None else SubsetRandomSampler(dataset_indices)
     train_loader = DataLoader(train_set,
                               batch_size=batch_size,
-                              shuffle=True,
-                              num_workers=num_workers)
+                              shuffle=sampler is not None,
+                              num_workers=num_workers,
+                              sampler=sampler)
 
     test_set = datasets.CIFAR100(root=data_folder,
                                  download=True,

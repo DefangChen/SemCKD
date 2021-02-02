@@ -125,6 +125,8 @@ def parse_option():
 
     parser.add_argument('--preact', action='store_true', help='Use tensor before relu as feature map (default: False)')
 
+    parser.add_argument('--trainset-indices', type=str, default=None, help='Index file of dataset.')
+
     opt = parser.parse_args()
 
     # set different learning rate from these 4 models
@@ -378,23 +380,27 @@ def main_worker(gpu, ngpus_per_node, opt):
                           weight_decay=opt.weight_decay)
 
     # dataloader
+    trainset_indices = None if opt.trainset_indices is None else torch.load(opt.trainset_indices)
     if opt.dataset == 'cifar100':
         if opt.distill in ['crd']:
             train_loader, val_loader, n_data = get_cifar100_dataloaders_sample(batch_size=opt.batch_size,
                                                                                num_workers=opt.num_workers,
                                                                                k=opt.nce_k,
-                                                                               mode=opt.mode)
+                                                                               mode=opt.mode,
+                                                                               dataset_indices=trainset_indices)
         else:
             res = get_cifar100_dataloaders(batch_size=opt.batch_size,
-                                           num_workers=opt.num_workers, extra=opt.distill == 'mgd')
+                                           num_workers=opt.num_workers,
+                                           extra=opt.distill == 'mgd',
+                                           dataset_indices=trainset_indices)
             train_loader, val_loader = res[0], res[1]
             extra_loader = None if len(res) < 3 else res[2]
     elif opt.dataset in imagenet_list:
         if opt.dali is None:
             res = get_imagenet_dataloader(dataset=opt.dataset, batch_size=opt.batch_size,
-                                                                              num_workers=opt.num_workers,
-                                                                              multiprocessing_distributed=opt.multiprocessing_distributed,
-                                                                              extra=opt.distill == 'mgd')
+                                          num_workers=opt.num_workers,
+                                          multiprocessing_distributed=opt.multiprocessing_distributed,
+                                          extra=opt.distill == 'mgd')
             train_loader, val_loader, train_sampler = res[0:3]
             extra_loader, _ = res[3:5] if len(res) >= 5 else (None, None)
         else:
