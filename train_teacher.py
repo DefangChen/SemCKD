@@ -56,6 +56,7 @@ def parse_option():
     parser.add_argument('--dali', type=str, choices=['cpu', 'gpu'], default=None)
 
     parser.add_argument('--trainset-indices', type=str, default=None, help='Index file of dataset.')
+    parser.add_argument('--label-noise', type=str, default=None, help='Label noise file(python dict loadable by torch).')
 
     # multiprocessing
     parser.add_argument('--multiprocessing-distributed', action='store_true',
@@ -182,9 +183,11 @@ def main_worker(gpu, ngpus_per_node, opt):
     # dataloader
     if opt.dataset == 'cifar100':
         trainset_indices = None if opt.trainset_indices is None else torch.load(opt.trainset_indices)
+        label_noise = None if opt.label_noise is None else torch.load(opt.label_noise)
         train_loader, val_loader = get_cifar100_dataloaders(batch_size=opt.batch_size,
                                                             num_workers=opt.num_workers,
-                                                            dataset_indices=trainset_indices)
+                                                            dataset_indices=trainset_indices,
+                                                            label_noise=label_noise)
     elif opt.dataset in imagenet_list:
         if opt.dali is None:
             train_loader, val_loader, train_sampler = get_imagenet_dataloader(

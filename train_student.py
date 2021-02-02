@@ -125,7 +125,8 @@ def parse_option():
 
     parser.add_argument('--preact', action='store_true', help='Use tensor before relu as feature map (default: False)')
 
-    parser.add_argument('--trainset-indices', type=str, default=None, help='Index file of dataset.')
+    parser.add_argument('--trainset-indices', type=str, default=None, help='Index file of dataset(python list loadable by torch).')
+    parser.add_argument('--label-noise', type=str, default=None, help='Label noise file(python dict loadable by torch).')
 
     opt = parser.parse_args()
 
@@ -381,6 +382,7 @@ def main_worker(gpu, ngpus_per_node, opt):
 
     # dataloader
     trainset_indices = None if opt.trainset_indices is None else torch.load(opt.trainset_indices)
+    label_noise = None if opt.label_noise is None else torch.load(opt.label_noise)
     if opt.dataset == 'cifar100':
         if opt.distill in ['crd']:
             train_loader, val_loader, n_data = get_cifar100_dataloaders_sample(batch_size=opt.batch_size,
@@ -392,7 +394,8 @@ def main_worker(gpu, ngpus_per_node, opt):
             res = get_cifar100_dataloaders(batch_size=opt.batch_size,
                                            num_workers=opt.num_workers,
                                            extra=opt.distill == 'mgd',
-                                           dataset_indices=trainset_indices)
+                                           dataset_indices=trainset_indices,
+                                           label_noise=label_noise)
             train_loader, val_loader = res[0], res[1]
             extra_loader = None if len(res) < 3 else res[2]
     elif opt.dataset in imagenet_list:

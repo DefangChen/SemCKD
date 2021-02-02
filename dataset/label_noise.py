@@ -20,6 +20,10 @@ def stratified_split(dataset, n_per_class):
 
 if __name__ == '__main__':
     trainset = CIFAR100(root='data', train=True, download=True)
-    for n_per_class in [125, 250, 375]:
+    for n_per_class in [50, 150, 250]:
         _, indices = stratified_split(trainset, n_per_class)
-        torch.save(indices, 'dataset/cifar_%d_per_class_index.pth' % n_per_class)
+        rand_labels = torch.randint(100, (len(indices), ))
+        noise = {
+            x: rand_labels[i].item() for i, x in enumerate(indices)
+        }
+        torch.save(noise, 'dataset/cifar100_label_noise_%d_per_class.pth' % n_per_class)
