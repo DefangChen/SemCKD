@@ -18,7 +18,7 @@ from models import model_dict
 
 parser = argparse.ArgumentParser('argument for training')
 parser.add_argument('--model', type=str, default='vgg8', choices=['vgg8', 'resnet32x4', 'resnet8x4', 'vgg13',
-                                                                  'ShuffleV2', 'MobileNetV2', 'wrn_40_2'])
+                                                                  'ShuffleV2', 'MobileNetV2', 'wrn_40_2', 'wrn_16_2'])
 parser.add_argument('--model-path', type=str, required=True)
 parser.add_argument('--target-dataset', type=str, default='stl10', choices=['stl10', 'tiny-imagenet'])
 parser.add_argument('--id', type=str, default='0')
