@@ -49,12 +49,14 @@ python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transfo
 ## Citation
 If you find this repository useful, please consider citing the following paper:
 ```
-@article{chen2020cross,
-  title={Cross-Layer Distillation with Semantic Calibration},
-  author={Chen, Defang and Mei, Jian-Ping and Zhang, Yuan and Wang, Can and Wang, Zhe and Feng, Yan and Chen, Chun},
-  journal={arXiv preprint arXiv:2012.03236},
-  year={2020}
+@inproceedings{chen2021cross,
+  author    = {Defang Chen and Jian{-}Ping Mei and Yuan Zhang and Can Wang and Zhe Wang and Yan Feng and Chun Chen},
+  title     = {Cross-Layer Distillation with Semantic Calibration},
+  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  pages     = {7028--7036},
+  year      = {2021},
 }
+
 ```
 
 ## Acknowledgement
