@@ -37,12 +37,14 @@ python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transfo
 ```
 
 **Post Scripts:** 
-
+- The implementation of compared methods are based on the author-provided code and a open-source benchmark https://github.com/HobbitLong/RepDistiller. The main difference is that we set both weights for classification loss and logit-level distillation loss as **1** throughout the experiments, which is a more common practice for knowledge distillation. (*-r 1 -a 1*) 
+- Note that the wide ResNet model in the "RepDistiller/models/wrn.py" is almost the same as those in resnet.py. For example, wrn_40_2 in wrn.py almost equals to resnet38x2 in resnet.py. The only difference is that resnet38x2 has additional three BN layers, which will lead to 2*(16+32+64)*k parameters [k=2 in this comparison].
+- Three FC layers of VGG-ImageNet are replaced with single one, thus the total layer number should be reduced by two on CIFAR-100. For example, the actual number of layers for VGG-8 is 6.
 - Computing Infrastructure:
   - For CIFAR-100,  we run experiments on a single machine that contains one NVIDIA GeForce TITAN X-Pascal GPU with 12 GB of RAM at 11.4 Gbps memory speed, 32 Inter (R) Xeon (R) CPU E5-2620 v4 @ 2.10GHz. The CUDA version is 10.2. The PyTorch version is 1.0.
   - For ImageNet, we run experiments on a single machine that contains eight NVIDIA GeForce RTX 2080Ti GPUs with 11 GB of RAM at 14 Gbps memory speed, 64 Intel (R) Xeon (R) Silver 4216 CPU @ 2.10 GHz. The CUDA version is 10.2. The PyTorch version is 1.6.
 
-- The main part of this repo was forked from https://github.com/HobbitLong/RepDistiller. The main difference in implementation is that we set both weights for classification loss and logit-level distillation loss as **1** throughout the experiments, which is a more common practice for knowledge distillation. (*-r 1 -a 1*) 
+
 
 - The codes in this repository was merged from different sources, and we have not tested them thoroughly. Hence, if you have any questions, please contact us without hesitation.
 
@@ -58,7 +60,3 @@ If you find this repository useful, please consider citing the following paper:
 }
 
 ```
-
-## Acknowledgement
-
-The implementation of compared methods are mainly based on the author-provided code and a open-source benchmark https://github.com/HobbitLong/RepDistiller. Thanks to the excellent work of [Yonglong Tian](https://github.com/HobbitLong), we can implement SemCKD and some other methods easily.
