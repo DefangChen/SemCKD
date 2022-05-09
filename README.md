@@ -1,6 +1,12 @@
 # SemCKD
 
-Cross-Layer Distillation with Semantic Calibration (AAAI-2021) https://arxiv.org/abs/2012.03236
+Cross-Layer Distillation with Semantic Calibration (AAAI-2021) https://arxiv.org/abs/2012.03236v1
+
+Journal version was published in IEEE TKDE https://ieeexplore.ieee.org/document/9767633
+
+A more compact and clear implementation was provided in https://github.com/DefangChen/SimKD
+
+## Overview
 
 The existing *feature distillation* works can be separated into two categories according to the position where the knowledge distillation is performed. As shown in the figure below, one is *feature-map distillation* and another one is *feature-embedding distillation*.
 
@@ -36,17 +42,15 @@ python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transfo
 --multiprocessing-distributed --learning_rate 0.1 --lr_decay_epochs 30,60 --weight_decay 1e-4 --dali gpu
 ```
 
-**Post Scripts:** 
+**Note:** 
 - The implementation of compared methods are based on the author-provided code and a open-source benchmark https://github.com/HobbitLong/RepDistiller. The main difference is that we set both weights for classification loss and logit-level distillation loss as **1** throughout the experiments, which is a more common practice for knowledge distillation. (*-r 1 -a 1*) 
 - Note that the wide ResNet model in the "RepDistiller/models/wrn.py" is almost the same as those in resnet.py. For example, wrn_40_2 in wrn.py almost equals to resnet38x2 in resnet.py. The only difference is that resnet38x2 has additional three BN layers, which will lead to 2*(16+32+64)*k parameters [k=2 in this comparison].
 - Three FC layers of VGG-ImageNet are replaced with single one, thus the total layer number should be reduced by two on CIFAR-100. For example, the actual number of layers for VGG-8 is 6.
 - Computing Infrastructure:
-  - For CIFAR-100,  we run experiments on a single machine that contains one NVIDIA GeForce TITAN X-Pascal GPU with 12 GB of RAM at 11.4 Gbps memory speed, 32 Inter (R) Xeon (R) CPU E5-2620 v4 @ 2.10GHz. The CUDA version is 10.2. The PyTorch version is 1.0.
-  - For ImageNet, we run experiments on a single machine that contains eight NVIDIA GeForce RTX 2080Ti GPUs with 11 GB of RAM at 14 Gbps memory speed, 64 Intel (R) Xeon (R) Silver 4216 CPU @ 2.10 GHz. The CUDA version is 10.2. The PyTorch version is 1.6.
-
-
-
-- The codes in this repository was merged from different sources, and we have not tested them thoroughly. Hence, if you have any questions, please contact us without hesitation.
+  - For CIFAR-100,  we run experiments on a single machine that contains one NVIDIA GeForce TITAN X-Pascal GPU, 32 Inter (R) Xeon (R) CPU E5-2620 v4 @ 2.10GHz. The CUDA version is 10.2. The PyTorch version is 1.0.
+  - For ImageNet, we run experiments on a single machine that contains eight NVIDIA GeForce RTX 2080Ti GPUs, 64 Intel (R) Xeon (R) Silver 4216 CPU @ 2.10 GHz. The CUDA version is 10.2. The PyTorch version is 1.6.
+- The codes in this repository was merged from different sources, and we have not tested them thoroughly. Hence, if you have any questions, please contact us without hesitation. 
+ 
 
 ## Citation
 If you find this repository useful, please consider citing the following paper:
@@ -59,4 +63,13 @@ If you find this repository useful, please consider citing the following paper:
   year      = {2021},
 }
 
+@article{chen2022cross,  
+  author    = {Wang, Can and Chen, Defang and Mei, Jian-Ping and Zhang, Yuan and Feng, Yan and Chen, Chun},  
+  title     = {SemCKD: Semantic Calibration for Cross-Layer Knowledge Distillation},   
+  journal   = {IEEE Transactions on Knowledge and Data Engineering},   
+  year      = {2022},  
+  doi       = {10.1109/TKDE.2022.3171571}
+}
 ```
+
+
