@@ -4,7 +4,7 @@ Cross-Layer Distillation with Semantic Calibration (AAAI-2021) https://arxiv.org
 
 Journal version was published in IEEE TKDE https://ieeexplore.ieee.org/document/9767633
 
-A more compact and clear implementation was provided in https://github.com/DefangChen/SimKD
+A more compact and clear implementation (CVPR-2022) was provided in https://github.com/DefangChen/SimKD 
 
 ## Overview
 
@@ -54,7 +54,9 @@ python train_student.py --path-t ./save/models/ResNet34_vanilla/resnet34_transfo
 
 ## Citation
 If you find this repository useful, please consider citing the following paper:
-```
+
+
+```bibtex
 @inproceedings{chen2021cross,
   author    = {Defang Chen and Jian{-}Ping Mei and Yuan Zhang and Can Wang and Zhe Wang and Yan Feng and Chun Chen},
   title     = {Cross-Layer Distillation with Semantic Calibration},
@@ -63,12 +65,15 @@ If you find this repository useful, please consider citing the following paper:
   year      = {2021},
 }
 
-@article{chen2022cross,  
-  author    = {Wang, Can and Chen, Defang and Mei, Jian-Ping and Zhang, Yuan and Feng, Yan and Chen, Chun},  
-  title     = {SemCKD: Semantic Calibration for Cross-Layer Knowledge Distillation},   
-  journal   = {IEEE Transactions on Knowledge and Data Engineering},   
-  year      = {2022},  
-  doi       = {10.1109/TKDE.2022.3171571}
+@article{wang2022semckd,
+  title={SemCKD: Semantic calibration for cross-layer knowledge distillation},
+  author={Wang, Can and Chen, Defang and Mei, Jian-Ping and Zhang, Yuan and Feng, Yan and Chen, Chun},
+  journal={IEEE Transactions on Knowledge and Data Engineering},
+  volume={35},
+  number={6},
+  pages={6305--6319},
+  year={2022},
+  publisher={IEEE}
 }
 ```
 
